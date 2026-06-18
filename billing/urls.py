@@ -6,8 +6,8 @@ urlpatterns = [
     path('', views.home, name='home'),  
     #Auth
     path('signup/', views.SignUpView.as_view(), name='signup'),
-    # Brand (FBV)
-    path('brands/', views.brand_list, name='brand_list'),
+    # Brand
+    path('brands/', views.BrandListView.as_view(), name='brand_list'),
     path('brands/create/', views.brand_create, name='brand_create'),
     path('brands/<int:pk>/edit/', views.brand_update, name='brand_update'),
     path('brands/<int:pk>/delete/', views.brand_delete, name='brand_delete'),
@@ -43,8 +43,8 @@ urlpatterns = [
          views.CustomerUpdateView.as_view(), name='customer_update'),
     path('customers/<int:pk>/delete/',
          views.CustomerDeleteView.as_view(), name='customer_delete'),
-    # Invoice (FBV - funcional con detalle)
-    path('invoices/', views.invoice_list, name='invoice_list'),
+    # Invoice
+    path('invoices/', views.InvoiceListView.as_view(), name='invoice_list'),
     path('invoices/create/', views.invoice_create, name='invoice_create'),
     path('invoices/<int:pk>/', views.invoice_detail, name='invoice_detail'),
     path('invoices/<int:pk>/delete/', views.invoice_delete, name='invoice_delete'),

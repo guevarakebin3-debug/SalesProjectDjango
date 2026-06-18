@@ -6,7 +6,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib.auth import login
 from .models import *
-from shared.mixins import StaffRequiredMixin
+from shared.mixins import StaffRequiredMixin, SearchExportMixin
 from shared.decorators import audit_action
 from .forms import SignUpForm, BrandForm, InvoiceForm, InvoiceDetailFormSet
 from decimal import Decimal
@@ -37,11 +37,6 @@ def home(request):
     return render(request, 'billing/home.html', context)
 
 
-@login_required
-@audit_action('LIST_BRANDS')  
-def brand_list(request):
-    brands = Brand.objects.all()
-    return render(request, 'billing/brand_list.html', {'brands': brands})
 
 @login_required
 @audit_action('CREATE_BRAND')
@@ -78,11 +73,6 @@ def brand_delete(request, pk):
         return redirect('billing:brand_list')
     return render(request, 'billing/brand_confirm_delete.html', {'object': brand})
 
-@login_required
-def invoice_list(request):
-    """Lista todas las facturas con sus totales."""
-    invoices = Invoice.objects.select_related('customer').all()
-    return render(request, 'billing/invoice_list.html', {'items': invoices})
 
 
 @login_required
@@ -143,9 +133,31 @@ def invoice_delete(request, pk):
         return redirect('billing:invoice_list')
     return render(request, 'billing/invoice_confirm_delete.html', {'object': invoice})
 
+# === BRAND (CBV list) ===
+class BrandListView(LoginRequiredMixin, SearchExportMixin, ListView):
+    model = Brand
+    template_name = 'billing/brand_list.html'
+    context_object_name = 'items'
+    export_filename = 'marcas'
+    export_fields = [
+        ('Name', 'name'), ('Description', 'description'), ('Active', 'is_active'),
+    ]
+    search_fields = [
+        {'param': 'q', 'fields': ['name__icontains', 'description__icontains']},
+        {'param': 'is_active', 'field': 'is_active', 'type': 'bool'},
+    ]
+
 # === PRODUCTGROUP (CBV) ===
-class ProductGroupListView(LoginRequiredMixin, ListView):
-    model = ProductGroup; template_name = 'billing/productgroup_list.html'; context_object_name = 'items'
+class ProductGroupListView(LoginRequiredMixin, SearchExportMixin, ListView):
+    model = ProductGroup
+    template_name = 'billing/productgroup_list.html'
+    context_object_name = 'items'
+    export_filename = 'grupos'
+    export_fields = [('Name', 'name'), ('Active', 'is_active')]
+    search_fields = [
+        {'param': 'q', 'field': 'name__icontains'},
+        {'param': 'is_active', 'field': 'is_active', 'type': 'bool'},
+    ]
 class ProductGroupCreateView(LoginRequiredMixin, CreateView):
     model = ProductGroup; fields = ['name','is_active']; template_name = 'billing/productgroup_form.html'; success_url = reverse_lazy('billing:productgroup_list')
 class ProductGroupUpdateView(LoginRequiredMixin, UpdateView):
@@ -155,8 +167,20 @@ class ProductGroupDeleteView(LoginRequiredMixin, StaffRequiredMixin, DeleteView)
     staff_redirect_url = '/groups/'  
 
 # === SUPPLIER (CBV) ===
-class SupplierListView(LoginRequiredMixin, ListView):
-    model = Supplier; template_name = 'billing/supplier_list.html'; context_object_name = 'items'
+class SupplierListView(LoginRequiredMixin, SearchExportMixin, ListView):
+    model = Supplier
+    template_name = 'billing/supplier_list.html'
+    context_object_name = 'items'
+    export_filename = 'proveedores'
+    export_fields = [
+        ('Name', 'name'), ('Contact', 'contact_name'),
+        ('Email', 'email'), ('Phone', 'phone'), ('Active', 'is_active'),
+    ]
+    search_fields = [
+        {'param': 'q', 'fields': ['name__icontains', 'contact_name__icontains', 'email__icontains']},
+        {'param': 'phone', 'field': 'phone__icontains'},
+        {'param': 'is_active', 'field': 'is_active', 'type': 'bool'},
+    ]
 class SupplierCreateView(LoginRequiredMixin, CreateView):
     model = Supplier; fields = ['name','contact_name','email','phone','address','is_active']; template_name = 'billing/supplier_form.html'; success_url = reverse_lazy('billing:supplier_list')
 class SupplierUpdateView(LoginRequiredMixin, UpdateView):
@@ -166,8 +190,32 @@ class SupplierDeleteView(LoginRequiredMixin, StaffRequiredMixin, DeleteView):
     staff_redirect_url = '/suppliers/'
 
 # === PRODUCT (CBV) ===
-class ProductListView(LoginRequiredMixin, ListView):
-    model = Product; template_name = 'billing/product_list.html'; context_object_name = 'items'
+class ProductListView(LoginRequiredMixin, SearchExportMixin, ListView):
+    model = Product
+    queryset = Product.objects.select_related('brand', 'group').prefetch_related('suppliers')
+    template_name = 'billing/product_list.html'
+    context_object_name = 'items'
+    export_filename = 'productos'
+    export_fields = [
+        ('Name',        'name'),
+        ('Description', 'description'),
+        ('Brand',       'brand__name'),
+        ('Group',       'group__name'),
+        ('Price',       'unit_price'),
+        ('Stock',       'stock'),
+        ('Active',      'is_active'),
+    ]
+    search_fields = [
+        {'param': 'q',         'fields': ['name__icontains', 'description__icontains']},
+        {'param': 'brand',     'field':  'brand__name__icontains'},
+        {'param': 'group',     'field':  'group__name__icontains'},
+        {'param': 'supplier',  'field':  'suppliers__name__icontains'},
+        {'param': 'price_min', 'field':  'unit_price__gte', 'type': 'number'},
+        {'param': 'price_max', 'field':  'unit_price__lte', 'type': 'number'},
+        {'param': 'stock_min', 'field':  'stock__gte',      'type': 'number'},
+        {'param': 'stock_max', 'field':  'stock__lte',      'type': 'number'},
+        {'param': 'is_active', 'field':  'is_active',       'type': 'bool'},
+    ]
 class ProductCreateView(LoginRequiredMixin, CreateView):
     model = Product; fields = ['name','description','brand','group','suppliers','unit_price','stock','is_active']; template_name = 'billing/product_form.html'; success_url = reverse_lazy('billing:product_list')
 class ProductUpdateView(LoginRequiredMixin, UpdateView):
@@ -177,8 +225,20 @@ class ProductDeleteView(LoginRequiredMixin, StaffRequiredMixin, DeleteView):
     staff_redirect_url = '/products/'
 
 # === CUSTOMER (CBV) ===
-class CustomerListView(LoginRequiredMixin, ListView):
-    model = Customer; template_name = 'billing/customer_list.html'; context_object_name = 'items'
+class CustomerListView(LoginRequiredMixin, SearchExportMixin, ListView):
+    model = Customer
+    template_name = 'billing/customer_list.html'
+    context_object_name = 'items'
+    export_filename = 'clientes'
+    export_fields = [
+        ('DNI', 'dni'), ('Last Name', 'last_name'), ('First Name', 'first_name'),
+        ('Email', 'email'), ('Phone', 'phone'), ('Active', 'is_active'),
+    ]
+    search_fields = [
+        {'param': 'q', 'fields': ['first_name__icontains', 'last_name__icontains', 'dni__icontains', 'email__icontains']},
+        {'param': 'phone',     'field': 'phone__icontains'},
+        {'param': 'is_active', 'field': 'is_active', 'type': 'bool'},
+    ]
 class CustomerCreateView(LoginRequiredMixin, CreateView):
     model = Customer; fields = ['dni','first_name','last_name','email','phone','address','is_active']; template_name = 'billing/customer_form.html'; success_url = reverse_lazy('billing:customer_list')
 class CustomerUpdateView(LoginRequiredMixin, UpdateView):
@@ -189,4 +249,29 @@ class CustomerDeleteView(LoginRequiredMixin, StaffRequiredMixin, DeleteView):
 
 
 
-# Create your views here.
+# === INVOICE (CBV list) ===
+class InvoiceListView(LoginRequiredMixin, SearchExportMixin, ListView):
+    model = Invoice
+    queryset = Invoice.objects.select_related('customer')
+    template_name = 'billing/invoice_list.html'
+    context_object_name = 'items'
+    export_filename = 'facturas'
+    export_fields = [
+        ('#',        'id'),
+        ('Customer', lambda inv: str(inv.customer)),
+        ('Date',     lambda inv: inv.invoice_date.strftime('%d/%m/%Y')),
+        ('Subtotal', 'subtotal'),
+        ('Tax',      'tax'),
+        ('Total',    'total'),
+    ]
+    search_fields = [
+        {'param': 'q', 'fields': [
+            'customer__first_name__icontains',
+            'customer__last_name__icontains',
+            'customer__dni__icontains',
+        ]},
+        {'param': 'date_from', 'field': 'invoice_date__date__gte', 'type': 'date'},
+        {'param': 'date_to',   'field': 'invoice_date__date__lte', 'type': 'date'},
+        {'param': 'total_min', 'field': 'total__gte', 'type': 'number'},
+        {'param': 'total_max', 'field': 'total__lte', 'type': 'number'},
+    ]
