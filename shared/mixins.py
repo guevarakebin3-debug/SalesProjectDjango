@@ -19,7 +19,7 @@ class SearchListMixin:
     El mixin también fija paginate_by = 10 e inyecta search_params al contexto.
     """
     search_fields = []
-    paginate_by = 10
+    paginate_by = 3
 
     def get_queryset(self):
         qs = super().get_queryset()

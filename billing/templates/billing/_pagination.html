@@ -9,10 +9,10 @@
       <a class="page-link" href="?{% for k,v in search_params.items %}{% if k != 'page' and k != 'export' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page=1">&laquo;</a>
     </li>
     <li class="page-item{% if not page_obj.has_previous %} disabled{% endif %}">
-      <a class="page-link" href="?{% for k,v in search_params.items %}{% if k != 'page' and k != 'export' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number|default:1 }}">&#8249;</a>
+      <a class="page-link" href="?{% for k,v in search_params.items %}{% if k != 'page' and k != 'export' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}">&#8249;</a>
     </li>
     <li class="page-item{% if not page_obj.has_next %} disabled{% endif %}">
-      <a class="page-link" href="?{% for k,v in search_params.items %}{% if k != 'page' and k != 'export' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number|default:page_obj.paginator.num_pages }}">&#8250;</a>
+      <a class="page-link" href="?{% for k,v in search_params.items %}{% if k != 'page' and k != 'export' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %}">&#8250;</a>
     </li>
     <li class="page-item{% if not page_obj.has_next %} disabled{% endif %}">
       <a class="page-link" href="?{% for k,v in search_params.items %}{% if k != 'page' and k != 'export' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.paginator.num_pages }}">&raquo;</a>
