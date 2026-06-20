@@ -51,6 +51,20 @@
         {% endif %}
       </td>
       <td>
+        <button type="button" class="btn btn-sm btn-info" onclick="showDetail(this)"
+          data-dm-title="{{ item.first_name }} {{ item.last_name }}"
+          data-dm-subtitle="Cliente"
+          data-dm-initial="{{ item.first_name|first|upper }}{{ item.last_name|first|upper }}"
+          data-dm-color="#198754"
+          data-dm-active="{{ item.is_active }}"
+          data-dm-f1l="DNI / RUC"    data-dm-f1v="{{ item.dni }}"
+          data-dm-f2l="Nombres"      data-dm-f2v="{{ item.first_name }}"
+          data-dm-f3l="Apellidos"    data-dm-f3v="{{ item.last_name }}"
+          data-dm-f4l="Email"        data-dm-f4v="{{ item.email|default:'—' }}"
+          data-dm-f5l="Teléfono"     data-dm-f5v="{{ item.phone|default:'—' }}"
+          data-dm-f6l="Estado"       data-dm-f6v="{{ item.is_active|yesno:'Activo,Inactivo' }}"
+          data-dm-f7l="Dirección"    data-dm-f7v="{{ item.address|default:'—' }}" data-dm-f7w="1"
+        >&#128065; Ver</button>
         <a href="{% url 'billing:customer_update' item.pk %}" class="btn btn-sm btn-warning">Edit</a>
         <a href="{% url 'billing:customer_delete' item.pk %}" class="btn btn-sm btn-danger">Delete</a>
       </td>

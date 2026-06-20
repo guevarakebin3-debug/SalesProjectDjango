@@ -45,6 +45,18 @@
       </td>
       <td>{{ item.created_at|date:"d/m/Y" }}</td>
       <td>
+        <button type="button" class="btn btn-sm btn-info" onclick="showDetail(this)"
+          data-dm-title="{{ item.name }}"
+          data-dm-subtitle="Marca"
+          data-dm-initial="{{ item.name|first|upper }}"
+          data-dm-color="#6f42c1"
+          data-dm-active="{{ item.is_active }}"
+          data-dm-f1l="Nombre"       data-dm-f1v="{{ item.name }}"
+          data-dm-f2l="Estado"       data-dm-f2v="{{ item.is_active|yesno:'Activo,Inactivo' }}"
+          data-dm-f3l="Creado"       data-dm-f3v="{{ item.created_at|date:'d/m/Y' }}"
+          data-dm-f4l="Actualizado"  data-dm-f4v="{{ item.updated_at|date:'d/m/Y' }}"
+          data-dm-f5l="Descripción"  data-dm-f5v="{{ item.description|default:'—' }}" data-dm-f5w="1"
+        >&#128065; Ver</button>
         <a href="{% url 'billing:brand_update' item.pk %}" class="btn btn-sm btn-warning">Editar</a>
         <a href="{% url 'billing:brand_delete' item.pk %}" class="btn btn-sm btn-danger">Eliminar</a>
       </td>

@@ -56,7 +56,18 @@
       <td class="text-end">${{ inv.tax }}</td>
       <td class="text-end fw-bold">${{ inv.total }}</td>
       <td>
-        <a href="{% url 'billing:invoice_detail' inv.pk %}" class="btn btn-sm btn-info">View</a>
+        <button type="button" class="btn btn-sm btn-info" onclick="showDetail(this)"
+          data-dm-title="Factura #{{ inv.id }}"
+          data-dm-subtitle="Factura"
+          data-dm-initial="#"
+          data-dm-color="#0d6efd"
+          data-dm-url="{% url 'billing:invoice_detail' inv.pk %}"
+          data-dm-f1l="Cliente"      data-dm-f1v="{{ inv.customer }}"
+          data-dm-f2l="Fecha"        data-dm-f2v="{{ inv.invoice_date|date:'d/m/Y H:i' }}"
+          data-dm-f3l="Subtotal"     data-dm-f3v="${{ inv.subtotal }}"
+          data-dm-f4l="IVA (15%)"    data-dm-f4v="${{ inv.tax }}"
+          data-dm-f5l="Total"        data-dm-f5v="${{ inv.total }}"
+        >&#128065; Ver</button>
         <a href="{% url 'billing:invoice_delete' inv.pk %}" class="btn btn-sm btn-danger">Delete</a>
       </td>
     </tr>

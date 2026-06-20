@@ -9,6 +9,7 @@ from .models import *
 from shared.mixins import StaffRequiredMixin, SearchExportMixin
 from shared.decorators import audit_action
 from .forms import SignUpForm, BrandForm, InvoiceForm, InvoiceDetailFormSet
+from .ProductForm import ProductForm
 from decimal import Decimal
 
 
@@ -197,13 +198,14 @@ class ProductListView(LoginRequiredMixin, SearchExportMixin, ListView):
     context_object_name = 'items'
     export_filename = 'productos'
     export_fields = [
-        ('Name',        'name'),
-        ('Description', 'description'),
-        ('Brand',       'brand__name'),
-        ('Group',       'group__name'),
-        ('Price',       'unit_price'),
-        ('Stock',       'stock'),
-        ('Active',      'is_active'),
+        ('Nombre',       'name'),
+        ('Descripción',  'description'),
+        ('Marca',        'brand__name'),
+        ('Grupo',        'group__name'),
+        ('Precio',       'unit_price'),
+        ('Stock',        'stock'),
+        ('Balance',      lambda p: p.unit_price * p.stock),
+        ('Activo',       'is_active'),
     ]
     search_fields = [
         {'param': 'q',         'fields': ['name__icontains', 'description__icontains']},
@@ -217,9 +219,16 @@ class ProductListView(LoginRequiredMixin, SearchExportMixin, ListView):
         {'param': 'is_active', 'field':  'is_active',       'type': 'bool'},
     ]
 class ProductCreateView(LoginRequiredMixin, CreateView):
-    model = Product; fields = ['name','description','brand','group','suppliers','unit_price','stock','is_active']; template_name = 'billing/product_form.html'; success_url = reverse_lazy('billing:product_list')
+    model = Product
+    form_class = ProductForm
+    template_name = 'billing/product_form.html'
+    success_url = reverse_lazy('billing:product_list')
+
 class ProductUpdateView(LoginRequiredMixin, UpdateView):
-    model = Product; fields = ['name','description','brand','group','suppliers','unit_price','stock','is_active']; template_name = 'billing/product_form.html'; success_url = reverse_lazy('billing:product_list')
+    model = Product
+    form_class = ProductForm
+    template_name = 'billing/product_form.html'
+    success_url = reverse_lazy('billing:product_list')
 class ProductDeleteView(LoginRequiredMixin, StaffRequiredMixin, DeleteView):
     model = Product; template_name = 'billing/product_confirm_delete.html'; success_url = reverse_lazy('billing:product_list')
     staff_redirect_url = '/products/'
