@@ -79,8 +79,8 @@
               data-dm-f5l="Teléfono"             data-dm-f5v="{{ item.phone|default:'—' }}"
               data-dm-f6l="Estado"               data-dm-f6v="{{ item.is_active|yesno:'Activo,Inactivo' }}"
               data-dm-f7l="Dirección"            data-dm-f7v="{{ item.address|default:'—' }}" data-dm-f7w="1"
+              data-dm-edit-url="{% url 'billing:customer_update' item.pk %}"
             >&#128065; Ver</button>
-            <a href="{% url 'billing:customer_update' item.pk %}" class="btn btn-sm btn-warning">Editar</a>
             <a href="{% url 'billing:customer_delete' item.pk %}" class="btn btn-sm btn-danger">Eliminar</a>
           </td>
         </tr>

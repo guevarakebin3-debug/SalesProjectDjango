@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.forms import inlineformset_factory
-from .models import Brand, Invoice, InvoiceDetail
+from .models import Brand, Invoice, InvoiceDetail, CreditNote
 
 
 class SignUpForm(UserCreationForm):
@@ -31,23 +31,41 @@ class InvoiceForm(forms.ModelForm):
     class Meta:
         model = Invoice
         fields = ['customer']
+        labels = {'customer': 'Cliente'}
         widgets = {
             'customer': forms.Select(attrs={'class': 'form-select'}),
         }
 
 
-# Formset: permite agregar MÚLTIPLES detalles dentro de UNA factura
-# extra=3: muestra 3 filas vacías para agregar productos
-# can_delete=True: permite eliminar filas
 InvoiceDetailFormSet = inlineformset_factory(
-    Invoice,           # Modelo padre
-    InvoiceDetail,     # Modelo hijo
+    Invoice,
+    InvoiceDetail,
     fields=['product', 'quantity', 'unit_price'],
-    extra=3,           # 3 filas vacías para agregar
-    can_delete=True,   # Checkbox para eliminar filas
+    extra=1,
+    min_num=1,
+    validate_min=True,
+    can_delete=True,
     widgets={
-        'product': forms.Select(attrs={'class': 'form-select'}),
-        'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
-        'unit_price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+        'product':    forms.Select(attrs={'class': 'form-select id-product'}),
+        'quantity':   forms.NumberInput(attrs={'class': 'form-control id-qty', 'min': 1}),
+        'unit_price': forms.NumberInput(attrs={'class': 'form-control id-price', 'step': '0.01', 'min': '0.01'}),
     }
 )
+
+
+class CreditNoteForm(forms.ModelForm):
+    """Formulario para crear una Nota de Crédito sobre una factura emitida."""
+    class Meta:
+        model  = CreditNote
+        fields = ['tipo', 'amount', 'reason']
+        labels = {
+            'tipo':   'Tipo de Nota',
+            'amount': 'Monto',
+            'reason': 'Motivo',
+        }
+        widgets = {
+            'tipo':   forms.Select(attrs={'class': 'form-select'}),
+            'amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
+            'reason': forms.Textarea(attrs={'class': 'form-control', 'rows': 3,
+                                            'placeholder': 'Describa el motivo de la devolución o descuento…'}),
+        }

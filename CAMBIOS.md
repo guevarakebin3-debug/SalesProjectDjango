@@ -527,3 +527,340 @@ Añadida la columna Balance compatible con PDF y Excel:
 - `updateBalance()` recalcula en tiempo real al cambiar precio o stock
 - IDs de los inputs obtenidos via `{{ form.campo.auto_id }}` (no hardcoded)
 - Al cargar en modo Editar, `updateBalance()` se llama inmediatamente mostrando el balance actual
+
+---
+
+## Segundo Parcial — Módulo de Compras + Rediseño de Home
+
+---
+
+### Archivos Creados
+
+| Archivo | Descripción |
+|---|---|
+| `billing/CustomerForm.py` | Formulario centralizado de clientes con widgets, labels, help_texts, error_messages y marcado `is-invalid` |
+| `billing/templates/billing/customer_form.html` | Rediseño completo en dos columnas: formulario (izq.) + vista previa en tiempo real (der.) |
+| `billing/templates/billing/dashboard.html` | Panel post-login con selector de módulo Ventas / Compras y estadísticas rápidas |
+| `purchasing/__init__.py` | Inicialización del app |
+| `purchasing/apps.py` | Configuración `PurchasingConfig` |
+| `purchasing/models.py` | Modelos `Purchase` y `PurchaseDetail` |
+| `purchasing/admin.py` | `PurchaseAdmin` con `PurchaseDetailInline` (TabularInline) |
+| `purchasing/forms.py` | `PurchaseForm` + `PurchaseDetailForm` + `PurchaseDetailFormSet` |
+| `purchasing/views.py` | FBVs: `purchase_list`, `purchase_create`, `purchase_detail`, `purchase_delete` |
+| `purchasing/urls.py` | `app_name='purchasing'`, 4 rutas bajo `/purchases/` |
+| `purchasing/migrations/0001_initial.py` | Migración inicial del app purchasing |
+| `purchasing/templates/purchasing/purchase_list.html` | Lista de compras con filtros de búsqueda |
+| `purchasing/templates/purchasing/purchase_form.html` | Formulario con formset y cálculo de totales en tiempo real (JS) |
+| `purchasing/templates/purchasing/purchase_detail.html` | Vista de detalle de compra en dos columnas |
+| `purchasing/templates/purchasing/purchase_confirm_delete.html` | Confirmación de eliminación |
+
+### Archivos Modificados
+
+| Archivo | Cambio |
+|---|---|
+| `billing/views.py` | `home` pública con redirección al dashboard; nuevo `dashboard` view; `SignUpView` redirige al dashboard; import `CustomerForm` |
+| `billing/urls.py` | Nueva ruta `dashboard/`; importación de `CustomerCreateView`/`CustomerUpdateView` con `form_class` |
+| `billing/templates/billing/home.html` | Reemplazado completamente por landing page pública de TecnoStock S.A. |
+| `billing/templates/billing/base.html` | Navbar en español; dropdown "Ventas" con submenú; enlace "Compras"; `.nav-brand-accent` en lugar de inline style |
+| `billing/templates/billing/customer_list.html` | Traducida completamente al español |
+| `config/settings.py` | Añadido `'purchasing'` a `INSTALLED_APPS`; `LOGIN_REDIRECT_URL = '/dashboard/'` |
+| `config/urls.py` | `path('purchases/', include('purchasing.urls'))` |
+| `requirements.txt` | Añadido `django-extensions==4.1` (faltaba) |
+
+---
+
+### `billing/CustomerForm.py` *(creado)*
+
+Formulario análogo a `ProductForm.py`, centraliza toda la configuración del formulario de clientes.
+
+- `fields`: `dni`, `first_name`, `last_name`, `email`, `phone`, `address`, `is_active`
+- Widgets con clases Bootstrap (`form-control`, `form-check-input role="switch"`)
+- Labels en español, `help_texts` para `dni` e `is_active`, `error_messages` personalizados para `dni`, `first_name`, `last_name`
+- `__init__` marca `is-invalid` automáticamente en campos con errores cuando el formulario está enviado
+
+---
+
+### `billing/templates/billing/customer_form.html` *(rediseñado)*
+
+Rediseño completo en dos columnas dentro de una tarjeta con cabecera degradada verde.
+
+- **Columna izquierda `col-md-7`**: DNI, Nombres + Apellidos (fila), Email + Teléfono (fila), switch Activo, Dirección
+- **Columna derecha `col-md-5`**: tarjeta de vista previa con avatar `.cf-avatar` que muestra las iniciales y actualiza los campos en tiempo real mediante JavaScript
+- IIFE en `<script>` lee todos los inputs via `{{ form.campo.auto_id }}` y actualiza el preview en cada evento `input`
+
+---
+
+### `billing/templates/billing/home.html` *(reemplazado)*
+
+Página pública (sin login requerido). La vista `home` redirige al dashboard si el usuario ya está autenticado.
+
+Secciones de la landing page:
+1. **Hero**: nombre TecnoStock S.A., slogan, botones Iniciar Sesión y Registrarse
+2. **Nosotros**: tarjetas Misión, Visión y ¿Qué hacemos?
+3. **Características**: módulo Ventas, módulo Compras, Reportes, Seguridad
+4. **Contacto**: teléfono (+593 4 234-5678), dirección (Guayaquil), email (info@tecnostock.ec), redes sociales (@TecnoStockEC)
+
+Datos de contacto ficticios solo para el ejercicio académico.
+
+---
+
+### `billing/templates/billing/dashboard.html` *(creado)*
+
+Página post-login (`@login_required`) accesible en `/dashboard/`. Muestra:
+- Tarjeta **Módulo de Ventas** (gradiente azul) con accesos rápidos a Facturas, Clientes, Productos
+- Tarjeta **Módulo de Compras** (gradiente púrpura) con accesos rápidos a lista y nueva compra
+- Fila de estadísticas: total productos, clientes, facturas y productos con stock bajo (≤5)
+
+---
+
+### `purchasing/models.py` *(creado)*
+
+#### `Purchase`
+| Campo | Tipo | Notas |
+|---|---|---|
+| `supplier` | `ForeignKey(Supplier, PROTECT)` | Importado de `billing.models` |
+| `document_number` | `CharField(20)` | N° de factura/remisión del proveedor |
+| `purchase_date` | `DateField(auto_now_add)` | Fecha automática de registro |
+| `subtotal` | `DecimalField` | Calculado al guardar |
+| `tax` | `DecimalField` | IVA 15% del subtotal |
+| `total` | `DecimalField` | `subtotal + tax` |
+| `is_active` | `BooleanField` | Estado del registro |
+
+**Bonus:** `UniqueConstraint` sobre `(document_number, supplier)` → evita registrar el mismo documento dos veces para el mismo proveedor.
+
+#### `PurchaseDetail`
+| Campo | Tipo | Notas |
+|---|---|---|
+| `purchase` | `ForeignKey(Purchase, CASCADE)` | Elimina detalles al eliminar compra |
+| `product` | `ForeignKey(Product, PROTECT)` | No permite eliminar producto con compras |
+| `quantity` | `PositiveIntegerField` | Cantidad comprada |
+| `unit_cost` | `DecimalField` | Costo por unidad |
+| `subtotal` | `DecimalField` | Calculado en `save()`: `unit_cost × quantity` |
+
+---
+
+### `purchasing/views.py` *(creado)*
+
+#### `purchase_list`
+- Filtra por: texto libre (documento/proveedor), proveedor específico (select), rango de fechas
+- Inyecta lista de proveedores activos al contexto para el `<select>` de filtros
+
+#### `purchase_create`
+1. Valida `PurchaseForm` + `PurchaseDetailFormSet` juntos
+2. Guarda la compra, asocia el formset, calcula subtotal/IVA/total
+3. **Bonus stock**: por cada `PurchaseDetail` guardado, ejecuta `Product.objects.filter(pk=...).update(stock=F('stock') + quantity)` — usa expresión `F()` para actualizar atómicamente
+
+#### `purchase_detail`
+- Usa `select_related('supplier')` + `prefetch_related('details__product')` para optimizar queries
+
+#### `purchase_delete`
+- Elimina por `POST`; los detalles se eliminan en cascada automáticamente
+- **Nota al usuario**: el stock actualizado al crear no se revierte al eliminar (indicado en el template)
+
+---
+
+### `purchasing/forms.py` *(creado)*
+
+- `PurchaseForm`: campos `supplier` y `document_number` con widgets Bootstrap y validación de unicidad
+- `PurchaseDetailForm`: campos `product`, `quantity`, `unit_cost` con clases CSS funcionales (`pd-product`, `pd-qty`, `pd-cost`) usadas por el JavaScript del formulario
+- `PurchaseDetailFormSet = inlineformset_factory(Purchase, PurchaseDetail, extra=1, min_num=1, validate_min=True, can_delete=True)`
+
+---
+
+### `purchasing/templates/purchasing/purchase_form.html` *(creado)*
+
+Formulario en dos cards:
+1. **Datos de la Compra**: proveedor + N° documento (cabecera púrpura)
+2. **Detalle de Productos**: tabla formset con columnas Producto / Cantidad / Costo Unit. / Subtotal / Quitar
+
+#### JavaScript (IIFE)
+- `recalcRow(row)` → calcula `qty × cost` para cada fila, actualiza celda `.line-sub`
+- `recalcAll()` → suma todas las filas, calcula IVA 15%, actualiza `#summary-sub`, `#summary-tax`, `#summary-total`
+- Botón **"+ Agregar Fila"** → clona la primera `<tr>`, reindexiza los campos (`details-N-campo`), limpia valores y actualiza `TOTAL_FORMS`
+- Botón **"✕"** → elimina la fila (mínimo 1 fila protegida) y recalcula totales
+- Todos los eventos delegados sobre `tbody` para funcionar con filas dinámicas
+
+---
+
+## Mejoras de UX — Modo Oscuro + Botón Editar en Modal
+
+---
+
+### Archivos Modificados
+
+| Archivo | Cambio |
+|---|---|
+| `billing/templates/billing/base.html` | Script de tema temprano, toggle 🌙/☀️, botón Editar en modal, CSS con variables Bootstrap, `showDetail()` actualizado |
+| `billing/templates/billing/brand_list.html` | `data-dm-edit-url` en botón Ver; eliminado botón Editar independiente de la fila |
+| `billing/templates/billing/productgroup_list.html` | Traducido al español; `data-dm-edit-url`; eliminado botón Editar independiente |
+| `billing/templates/billing/supplier_list.html` | Traducido al español; `data-dm-edit-url`; eliminado botón Editar independiente |
+| `billing/templates/billing/product_list.html` | Traducido al español; `data-dm-edit-url`; eliminado botón Editar independiente |
+| `billing/templates/billing/customer_list.html` | `data-dm-edit-url`; eliminado botón Editar independiente de la fila |
+| `billing/templates/billing/invoice_list.html` | Traducido al español (sin botón Editar — no existe vista de actualización) |
+
+---
+
+### Modo claro / oscuro
+
+#### Script de inicialización temprana (`<head>`)
+Se añade un `<script>` inline antes de la hoja de estilos de Bootstrap que lee `localStorage.getItem('theme')` y aplica `data-bs-theme` en `<html>` antes de que el navegador renderice cualquier elemento. Esto evita el parpadeo de tema (FOUC) al recargar la página.
+
+#### Botón de alternancia en la barra de navegación
+Se agregó un botón con icono 🌙 / ☀️ en la barra de navegación derecha. Al hacer clic llama a `toggleTheme()`:
+1. Lee el valor actual de `data-bs-theme` en `<html>`
+2. Aplica el opuesto (`light` ↔ `dark`)
+3. Guarda en `localStorage` para persistir entre páginas y sesiones
+4. Actualiza el icono del botón
+
+#### Soporte nativo de Bootstrap 5.3 Color Modes
+Bootstrap 5.3 adapta automáticamente todos sus componentes (tablas, cards, modals, formularios, dropdowns, navbar) cuando `data-bs-theme="dark"` está en `<html>`. No se requiere CSS adicional para los componentes del framework.
+
+#### Variables CSS en estilos propios
+Los estilos de `.dm-field`, `.dm-label`, `.dm-value` y `.dm-divider` se migraron de colores hardcoded (`#f8f9fa`, `#212529`, etc.) a variables CSS de Bootstrap:
+
+| Propiedad | Antes | Después |
+|---|---|---|
+| `dm-field` background | `#f8f9fa` | `var(--bs-tertiary-bg)` |
+| `dm-label` color | `#6c757d` | `var(--bs-secondary-color)` |
+| `dm-value` color | `#212529` | `var(--bs-body-color)` |
+| `dm-divider` border | `#dee2e6` | `var(--bs-border-color)` |
+| `pf-img-wrapper` border | `#dee2e6` | `var(--bs-border-color)` |
+
+---
+
+### Botón Editar dentro del modal de detalle
+
+#### Cambio en `base.html` — modal footer
+Se agregó un `<a id="dmEditLink">` (botón amarillo) en el footer del modal, antes del botón "Ver detalle completo":
+
+```html
+<a href="#" class="btn btn-warning d-none" id="dmEditLink">✎ Editar</a>
+```
+
+#### Cambio en `showDetail()` — lectura de `data-dm-edit-url`
+Se agregó el bloque de control del nuevo botón:
+
+```javascript
+var editLink = document.getElementById('dmEditLink');
+if (d.dmEditUrl) {
+  editLink.href = d.dmEditUrl;
+  editLink.classList.remove('d-none');
+} else {
+  editLink.classList.add('d-none');
+}
+```
+
+El botón solo aparece si el botón "Ver" del template tiene el atributo `data-dm-edit-url`. Si no existe (facturas, compras), el botón permanece oculto.
+
+#### Eliminación del botón Editar independiente en las filas
+Dado que el acceso a Editar ahora está dentro del modal, se eliminó el botón `btn-warning Editar` de la columna de acciones en los 5 templates de lista que lo tenían. La columna ahora solo contiene **Ver** y **Eliminar**.
+
+Módulos afectados: Marcas, Grupos, Proveedores, Productos, Clientes.
+Módulos sin botón Editar en modal (no tienen vista de actualización): Facturas, Compras.
+
+---
+
+## Ciclo de Vida de Facturas — Anular / Nota de Crédito / Sustitución
+
+---
+
+### Nuevo campo en Invoice: `estado`
+
+Se agregó el campo `estado` (PositiveSmallIntegerField) con tres valores:
+
+| Valor | Nombre | Descripción |
+|---|---|---|
+| 0 | Borrador | Factura recién creada; se puede editar y eliminar; **no descuenta stock** |
+| 1 | Emitida | Factura confirmada; stock descontado; solo se puede anular, obtener nota de crédito o sustituir |
+| 2 | Anulada | Factura cancelada; stock revertido; registro histórico visible pero inactivo |
+
+Las facturas pre-existentes en la base de datos fueron migradas automáticamente a `estado=1` (Emitida) mediante la migración de datos `0005_backfill_invoice_estado`.
+
+### Propiedades de permiso en el modelo
+
+```python
+@property
+def can_confirm(self):     return self.estado == self.BORRADOR
+@property
+def can_edit(self):        return self.estado == self.BORRADOR
+@property
+def can_delete(self):      return self.estado == self.BORRADOR
+@property
+def can_cancel(self):      return self.estado == self.EMITIDA
+@property
+def can_substitute(self):  return self.estado == self.EMITIDA
+@property
+def can_credit_note(self): return self.estado == self.EMITIDA
+```
+
+Los templates usan estas propiedades para mostrar/ocultar botones de acción en `invoice_detail.html`.
+
+---
+
+### Nuevo modelo: `CreditNote`
+
+```
+billing_creditnote
+  invoice   FK→Invoice (PROTECT)
+  date      DateField (auto_now_add)
+  tipo      CharField choices: 'total' | 'parcial'
+  amount    DecimalField
+  reason    CharField(300)
+  is_active BooleanField
+```
+
+Registrado en `admin.py` con `CreditNoteAdmin` y como `CreditNoteInline` en `InvoiceAdmin`.
+
+---
+
+### Nuevas vistas (FBV) en `billing/views.py`
+
+| Vista | URL | Acción |
+|---|---|---|
+| `invoice_create` | `invoices/create/` | Crea Borrador; sin cambio en stock; redirige a detalle |
+| `invoice_update` | `invoices/<pk>/edit/` | Edita un Borrador (bloquea si Emitida/Anulada) |
+| `invoice_confirm` | `invoices/<pk>/confirm/` | Borrador → Emitida; descuenta stock con `F('stock') - qty` |
+| `invoice_cancel` | `invoices/<pk>/cancel/` | Emitida → Anulada; revierte stock con `F('stock') + qty`; `is_active=False` |
+| `invoice_substitute` | `invoices/<pk>/substitute/` | Anula original + crea Borrador copia; redirige al nuevo Borrador para edición |
+| `credit_note_create` | `invoices/<pk>/credit-note/` | Crea CreditNote vinculada a factura Emitida |
+| `invoice_delete` | `invoices/<pk>/delete/` | Elimina solo Borradores (bloquea Emitidas/Anuladas con mensaje de error) |
+
+La función auxiliar `_recalc_invoice(invoice)` recalcula subtotal / IVA (15%) / total a partir de `invoice.details.all()`.
+
+---
+
+### Nuevas URLs en `billing/urls.py`
+
+```python
+path('invoices/<int:pk>/edit/',       views.invoice_update,     name='invoice_update'),
+path('invoices/<int:pk>/confirm/',    views.invoice_confirm,    name='invoice_confirm'),
+path('invoices/<int:pk>/cancel/',     views.invoice_cancel,     name='invoice_cancel'),
+path('invoices/<int:pk>/substitute/', views.invoice_substitute, name='invoice_substitute'),
+path('invoices/<int:pk>/credit-note/',views.credit_note_create, name='credit_note_create'),
+```
+
+---
+
+### Archivos Modificados
+
+| Archivo | Cambio |
+|---|---|
+| `billing/models.py` | Campo `estado` en `Invoice`; propiedades `can_*`; nuevo modelo `CreditNote` |
+| `billing/forms.py` | `CreditNoteForm`; `InvoiceDetailFormSet` → `extra=1, min_num=1, validate_min=True`; clases CSS para JS |
+| `billing/admin.py` | `CreditNoteAdmin`, `CreditNoteInline` en `InvoiceAdmin`; `readonly_fields` en InvoiceAdmin |
+| `billing/views.py` | 6 nuevas vistas; `invoice_create` redirige al detalle y guarda como Borrador; `InvoiceListView` → `export_fields` añade Estado, `search_fields` añade filtro por `estado` |
+| `billing/urls.py` | 5 nuevas rutas |
+| `billing/templates/billing/invoice_form.html` | Rediseñado con 2 cards, cálculo JS en tiempo real, botón "Agregar Fila", botón "Quitar", totales live |
+| `billing/templates/billing/invoice_detail.html` | Badge de estado; barra de botones condicional (Editar/Emitir/Anular/Nota de Crédito/Sustituir); sección de Notas de Crédito al pie |
+| `billing/templates/billing/invoice_list.html` | Columna Estado junto a Acciones con badge de color; filtro por estado (Activa/Anulada/Borrador); botón contextual Eliminar/Anular según estado |
+
+### Archivos Creados
+
+| Archivo | Descripción |
+|---|---|
+| `billing/templates/billing/invoice_confirm_emit.html` | Confirmación de emisión con tabla de productos y stock actual |
+| `billing/templates/billing/invoice_cancel.html` | Confirmación de anulación con tabla de reversión de stock |
+| `billing/templates/billing/invoice_substitute.html` | Confirmación de sustitución con explicación del flujo |
+| `billing/templates/billing/credit_note_form.html` | Formulario de Nota de Crédito (tipo/monto/motivo) |
+| `billing/migrations/0004_invoice_estado_creditnote.py` | Migración auto-generada: campo `estado` + tabla `CreditNote` |
+| `billing/migrations/0005_backfill_invoice_estado.py` | Migración de datos: actualiza facturas existentes a `estado=1` |

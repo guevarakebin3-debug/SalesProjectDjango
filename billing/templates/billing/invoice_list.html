@@ -1,37 +1,51 @@
 {% extends 'billing/base.html' %}
-{% block title %}Invoices{% endblock %}
+{% block title %}Facturas{% endblock %}
 {% block content %}
-<h2>Invoices</h2>
-<div class="d-flex gap-2 mb-3">
-  <a href="{% url 'billing:invoice_create' %}" class="btn btn-primary btn-sm">+ New Invoice</a>
-  {% include 'billing/_export_buttons.html' %}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h2 class="mb-0">Facturas</h2>
+  <div class="d-flex gap-2">
+    <a href="{% url 'billing:invoice_create' %}" class="btn btn-primary btn-sm">+ Nueva Factura</a>
+    {% include 'billing/_export_buttons.html' %}
+  </div>
 </div>
 
 <form method="get" class="mb-3">
   <div class="row g-2 align-items-end">
     <div class="col-md-3">
-      <input type="text" name="q" class="form-control form-control-sm" placeholder="Customer name / DNI"
+      <input type="text" name="q" class="form-control form-control-sm"
+             placeholder="Nombre / DNI del cliente"
              value="{{ search_params.q|default:'' }}">
     </div>
     <div class="col-md-2">
+      <select name="estado" class="form-select form-select-sm" aria-label="Filtrar por estado">
+        <option value="">Todos los estados</option>
+        <option value="1" {% if search_params.estado == '1' %}selected{% endif %}>Activa</option>
+        <option value="2" {% if search_params.estado == '2' %}selected{% endif %}>Anulada</option>
+        <option value="0" {% if search_params.estado == '0' %}selected{% endif %}>Borrador</option>
+      </select>
+    </div>
+    <div class="col-md-2">
       <input type="date" name="date_from" class="form-control form-control-sm"
-             title="Date from" value="{{ search_params.date_from|default:'' }}">
+             title="Desde" value="{{ search_params.date_from|default:'' }}">
     </div>
     <div class="col-md-2">
       <input type="date" name="date_to" class="form-control form-control-sm"
-             title="Date to" value="{{ search_params.date_to|default:'' }}">
+             title="Hasta" value="{{ search_params.date_to|default:'' }}">
     </div>
-    <div class="col-md-2">
-      <input type="number" name="total_min" class="form-control form-control-sm" placeholder="Total min"
-             step="0.01" value="{{ search_params.total_min|default:'' }}">
+    <div class="col-md-1">
+      <input type="number" name="total_min" class="form-control form-control-sm"
+             placeholder="Total mín." step="0.01"
+             value="{{ search_params.total_min|default:'' }}">
     </div>
-    <div class="col-md-2">
-      <input type="number" name="total_max" class="form-control form-control-sm" placeholder="Total max"
-             step="0.01" value="{{ search_params.total_max|default:'' }}">
+    <div class="col-md-1">
+      <input type="number" name="total_max" class="form-control form-control-sm"
+             placeholder="Total máx." step="0.01"
+             value="{{ search_params.total_max|default:'' }}">
     </div>
     <div class="col-auto d-flex gap-2">
-      <button type="submit" class="btn btn-secondary btn-sm">Search</button>
-      <a href="{% url 'billing:invoice_list' %}" class="btn btn-outline-secondary btn-sm">Clear</a>
+      <button type="submit" class="btn btn-secondary btn-sm">Buscar</button>
+      <a href="{% url 'billing:invoice_list' %}" class="btn btn-outline-secondary btn-sm">Limpiar</a>
     </div>
   </div>
 </form>
@@ -39,11 +53,12 @@
 <table class="table table-striped table-hover table-sm">
   <thead class="table-dark">
     <tr>
-      <th>#</th><th>Customer</th><th>Date</th>
+      <th>#</th><th>Cliente</th><th>Fecha</th>
       <th class="text-end">Subtotal</th>
-      <th class="text-end">Tax</th>
+      <th class="text-end">IVA</th>
       <th class="text-end">Total</th>
-      <th>Actions</th>
+      <th>Estado</th>
+      <th>Acciones</th>
     </tr>
   </thead>
   <tbody>
@@ -55,6 +70,7 @@
       <td class="text-end">${{ inv.subtotal }}</td>
       <td class="text-end">${{ inv.tax }}</td>
       <td class="text-end fw-bold">${{ inv.total }}</td>
+      <td><span class="badge {{ inv.estado_badge_class }}">{{ inv.get_estado_display }}</span></td>
       <td>
         <button type="button" class="btn btn-sm btn-info" onclick="showDetail(this)"
           data-dm-title="Factura #{{ inv.id }}"
@@ -62,17 +78,21 @@
           data-dm-initial="#"
           data-dm-color="#0d6efd"
           data-dm-url="{% url 'billing:invoice_detail' inv.pk %}"
-          data-dm-f1l="Cliente"      data-dm-f1v="{{ inv.customer }}"
-          data-dm-f2l="Fecha"        data-dm-f2v="{{ inv.invoice_date|date:'d/m/Y H:i' }}"
-          data-dm-f3l="Subtotal"     data-dm-f3v="${{ inv.subtotal }}"
-          data-dm-f4l="IVA (15%)"    data-dm-f4v="${{ inv.tax }}"
-          data-dm-f5l="Total"        data-dm-f5v="${{ inv.total }}"
+          data-dm-f1l="Cliente"   data-dm-f1v="{{ inv.customer }}"
+          data-dm-f2l="Fecha"     data-dm-f2v="{{ inv.invoice_date|date:'d/m/Y H:i' }}"
+          data-dm-f3l="Estado"    data-dm-f3v="{{ inv.get_estado_display }}"
+          data-dm-f4l="Subtotal"  data-dm-f4v="${{ inv.subtotal }}"
+          data-dm-f5l="IVA (15%)" data-dm-f5v="${{ inv.tax }}"
+          data-dm-f6l="Total"     data-dm-f6v="${{ inv.total }}"
         >&#128065; Ver</button>
-        <a href="{% url 'billing:invoice_delete' inv.pk %}" class="btn btn-sm btn-danger">Delete</a>
+        {% if inv.estado == 1 %}
+          <a href="{% url 'billing:invoice_cancel' inv.pk %}" class="btn btn-sm btn-danger">Anular</a>
+        {% endif %}
+        <a href="{% url 'billing:invoice_delete' inv.pk %}" class="btn btn-sm btn-outline-danger">Eliminar</a>
       </td>
     </tr>
     {% empty %}
-    <tr><td colspan="7" class="text-center">No invoices found.</td></tr>
+    <tr><td colspan="8" class="text-center">No se encontraron facturas.</td></tr>
     {% endfor %}
   </tbody>
 </table>

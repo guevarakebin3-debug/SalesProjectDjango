@@ -96,24 +96,92 @@ class CustomerProfile(models.Model):
     def __str__(self): return f'Profile: {self.customer}'
 
 class Invoice(models.Model):
-    """Cabecera de factura."""
-    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='invoices')
+    """Cabecera de factura con ciclo de vida: Borrador → Emitida → Anulada."""
+    BORRADOR = 0
+    EMITIDA  = 1
+    ANULADA  = 2
+    ESTADO_CHOICES = [
+        (BORRADOR, 'Borrador'),
+        (EMITIDA,  'Emitida'),
+        (ANULADA,  'Anulada'),
+    ]
+
+    customer     = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='invoices')
     invoice_date = models.DateTimeField(auto_now_add=True)
-    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    tax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    is_active = models.BooleanField(default=True)
-    class Meta: ordering = ['-invoice_date']
-    def __str__(self): return f'Invoice #{self.id} - {self.customer}'
+    subtotal     = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax          = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total        = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    estado       = models.PositiveSmallIntegerField(
+                       choices=ESTADO_CHOICES, default=BORRADOR, verbose_name='Estado')
+    is_active    = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-invoice_date']
+
+    def __str__(self):
+        return f'Factura #{self.id} - {self.customer}'
+
+    @property
+    def can_confirm(self):     return self.estado == self.BORRADOR
+    @property
+    def can_edit(self):        return self.estado == self.BORRADOR
+    @property
+    def can_delete(self):      return self.estado == self.BORRADOR
+    @property
+    def can_cancel(self):      return self.estado == self.EMITIDA
+    @property
+    def can_substitute(self):  return self.estado == self.EMITIDA
+    @property
+    def can_credit_note(self): return self.estado == self.EMITIDA
+
+    @property
+    def estado_badge_class(self):
+        return {
+            self.BORRADOR: 'bg-secondary',
+            self.EMITIDA:  'bg-success',
+            self.ANULADA:  'bg-danger',
+        }.get(self.estado, 'bg-secondary')
+
 
 class InvoiceDetail(models.Model):
     """Líneas de factura."""
-    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='details')
-    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='invoice_details')
-    quantity = models.IntegerField(default=1)
+    invoice    = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='details')
+    product    = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='invoice_details')
+    quantity   = models.IntegerField(default=1)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
-    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    subtotal   = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
     def __str__(self): return f'{self.product.name} x {self.quantity}'
+
     def save(self, *args, **kwargs):
         self.subtotal = self.quantity * self.unit_price
         super().save(*args, **kwargs)
+
+
+class CreditNote(models.Model):
+    """Nota de crédito vinculada a una factura emitida (devolución parcial o total)."""
+    TIPO_TOTAL   = 'total'
+    TIPO_PARCIAL = 'parcial'
+    TIPO_CHOICES = [
+        (TIPO_TOTAL,   'Devolución Total'),
+        (TIPO_PARCIAL, 'Devolución Parcial'),
+    ]
+
+    invoice   = models.ForeignKey(
+                    Invoice, on_delete=models.PROTECT,
+                    related_name='credit_notes', verbose_name='Factura')
+    date      = models.DateField(auto_now_add=True, verbose_name='Fecha')
+    tipo      = models.CharField(
+                    max_length=10, choices=TIPO_CHOICES,
+                    default=TIPO_TOTAL, verbose_name='Tipo')
+    amount    = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Monto')
+    reason    = models.CharField(max_length=300, verbose_name='Motivo')
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name        = 'Nota de Crédito'
+        verbose_name_plural = 'Notas de Crédito'
+        ordering            = ['-date', '-id']
+
+    def __str__(self):
+        return f'NC-{self.id} → Factura #{self.invoice_id}'
