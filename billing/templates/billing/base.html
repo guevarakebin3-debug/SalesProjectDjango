@@ -35,6 +35,7 @@
     .dm-section-label { letter-spacing: .06em; font-size: .75rem; }
     .inv-card-header { background: linear-gradient(135deg,#0d6efd 0%,#0943a8 100%); }
     .inv-avatar { background: linear-gradient(135deg,#0d6efd,#0943a8); font-size: 1.5rem; }
+    .cf-avatar { background: linear-gradient(135deg,#198754,#0f5132); font-size: 2rem; }
     .btn-nav-link { text-decoration: none; }
     /* Product Form */
     .pf-img-wrapper {
@@ -51,49 +52,28 @@
     .pf-ph-icon { font-size: 3.5rem; line-height: 1; }
     .pf-balance { background: linear-gradient(135deg, #e0f2fe, #bfdbfe); }
     .pf-balance-icon { font-size: 2rem; opacity: .2; line-height: 1; }
+    .nav-brand-accent { color: #60a5fa; }
   </style>
 </head>
 <body>
 <!-- Barra de navegación -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
   <div class="container">
-    <a class="navbar-brand" href="{% url 'billing:home' %}">Sales System</a>
+    <a class="navbar-brand fw-bold" href="{% url 'billing:home' %}">Tecno<span class="nav-brand-accent">Stock</span></a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav"
-            aria-controls="nav" aria-expanded="false" aria-label="Toggle navigation">
+            aria-controls="nav" aria-expanded="false" aria-label="Abrir menú">
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="nav">
       <ul class="navbar-nav me-auto">
-        {% if user.is_authenticated %}
-        <li class="nav-item"><a class="nav-link" href="{% url 'billing:brand_list' %}">Brands</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'billing:productgroup_list' %}">Groups</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'billing:supplier_list' %}">Suppliers</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'billing:product_list' %}">Products</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'billing:customer_list' %}">Customers</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'billing:invoice_list' %}">Invoices</a></li>
-        {% endif %}
+        <li class="nav-item dropdown">{% if user.is_authenticated %}<a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Ventas</a><ul class="dropdown-menu"><li><h6 class="dropdown-header">Catálogos</h6></li><li><a class="dropdown-item" href="{% url 'billing:brand_list' %}">Marcas</a></li><li><a class="dropdown-item" href="{% url 'billing:productgroup_list' %}">Grupos</a></li><li><a class="dropdown-item" href="{% url 'billing:supplier_list' %}">Proveedores</a></li><li><a class="dropdown-item" href="{% url 'billing:product_list' %}">Productos</a></li><li><hr class="dropdown-divider"></li><li><h6 class="dropdown-header">Operaciones</h6></li><li><a class="dropdown-item" href="{% url 'billing:customer_list' %}">Clientes</a></li><li><a class="dropdown-item" href="{% url 'billing:invoice_list' %}">Facturas</a></li></ul>{% endif %}</li>
+        <li class="nav-item">{% if user.is_authenticated %}<a class="nav-link" href="{% url 'purchasing:purchase_list' %}">Compras</a>{% endif %}</li>
       </ul>
       <ul class="navbar-nav">
-         {% if user.is_authenticated %}
-         <li class="nav-item">
-           <span class="nav-link text-light">{{ user.username }}</span>
-         </li>
-       <li class="nav-item">
-         <form method="post" action="{% url 'logout' %}" class="d-inline">
-           {% csrf_token %}
-           <button type="submit" class="nav-link btn btn-link text-light btn-nav-link">Logout</button>
-         </form>
-       </li>
-       {% else %}
-       <li class="nav-item">
-         <a class="nav-link" href="{% url 'login' %}">Login</a>
-       </li>
-       <li class="nav-item">
-         <a class="nav-link" href="{% url 'billing:signup' %}">Sign Up</a>
-       </li>
-       {% endif %}
+        <li class="nav-item">{% if user.is_authenticated %}<a class="nav-link text-light" href="{% url 'billing:dashboard' %}">{{ user.username }}</a>{% endif %}</li>
+        <li class="nav-item">{% if user.is_authenticated %}<form method="post" action="{% url 'logout' %}" class="d-inline">{% csrf_token %}<button type="submit" class="nav-link btn btn-link text-light btn-nav-link">Cerrar Sesión</button></form>{% else %}<a class="nav-link" href="{% url 'login' %}">Iniciar Sesión</a>{% endif %}</li>
+        <li class="nav-item">{% if not user.is_authenticated %}<a class="nav-link" href="{% url 'billing:signup' %}">Registrarse</a>{% endif %}</li>
       </ul>
-
     </div>
   </div>
 </nav>

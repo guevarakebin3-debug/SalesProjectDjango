@@ -10,6 +10,7 @@ from shared.mixins import StaffRequiredMixin, SearchExportMixin
 from shared.decorators import audit_action
 from .forms import SignUpForm, BrandForm, InvoiceForm, InvoiceDetailFormSet
 from .ProductForm import ProductForm
+from .CustomerForm import CustomerForm
 from decimal import Decimal
 
 
@@ -17,25 +18,28 @@ from decimal import Decimal
 class SignUpView(CreateView):
     form_class = SignUpForm
     template_name = 'registration/signup.html'
-    success_url = reverse_lazy('billing:brand_list')
+    success_url = reverse_lazy('billing:dashboard')
     def form_valid(self, form):
         response = super().form_valid(form)
         login(self.request, self.object)
         return response
 
-# === BRAND (FBV) ===
-@login_required
+# === HOME (página pública) ===
 def home(request):
-    """Vista principal del sistema. Muestra resumen general."""
+    if request.user.is_authenticated:
+        return redirect('billing:dashboard')
+    return render(request, 'billing/home.html')
+
+# === DASHBOARD (selector de módulos) ===
+@login_required
+def dashboard(request):
     context = {
-        'total_brands': Brand.objects.count(),
         'total_products': Product.objects.count(),
         'total_customers': Customer.objects.count(),
         'total_invoices': Invoice.objects.count(),
-        'recent_invoices': Invoice.objects.all()[:5],  # Últimas 5
-        'low_stock': Product.objects.filter(stock__lte=5, is_active=True),
+        'low_stock': Product.objects.filter(stock__lte=5, is_active=True).count(),
     }
-    return render(request, 'billing/home.html', context)
+    return render(request, 'billing/dashboard.html', context)
 
 
 
@@ -249,9 +253,16 @@ class CustomerListView(LoginRequiredMixin, SearchExportMixin, ListView):
         {'param': 'is_active', 'field': 'is_active', 'type': 'bool'},
     ]
 class CustomerCreateView(LoginRequiredMixin, CreateView):
-    model = Customer; fields = ['dni','first_name','last_name','email','phone','address','is_active']; template_name = 'billing/customer_form.html'; success_url = reverse_lazy('billing:customer_list')
+    model = Customer
+    form_class = CustomerForm
+    template_name = 'billing/customer_form.html'
+    success_url = reverse_lazy('billing:customer_list')
+
 class CustomerUpdateView(LoginRequiredMixin, UpdateView):
-    model = Customer; fields = ['dni','first_name','last_name','email','phone','address','is_active']; template_name = 'billing/customer_form.html'; success_url = reverse_lazy('billing:customer_list')
+    model = Customer
+    form_class = CustomerForm
+    template_name = 'billing/customer_form.html'
+    success_url = reverse_lazy('billing:customer_list')
 class CustomerDeleteView(LoginRequiredMixin, StaffRequiredMixin, DeleteView):
     model = Customer; template_name = 'billing/customer_confirm_delete.html'; success_url = reverse_lazy('billing:customer_list')
     staff_redirect_url = '/customers/'

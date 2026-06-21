@@ -1,0 +1,92 @@
+{% extends 'billing/base.html' %}
+{% block title %}Panel Principal – TecnoStock S.A.{% endblock %}
+{% block content %}
+
+<div class="mb-4">
+  <h2 class="mb-1">Bienvenido, {{ user.first_name|default:user.username }} &#128075;</h2>
+  <p class="text-muted mb-0">Selecciona el módulo con el que deseas trabajar hoy.</p>
+</div>
+
+{# ── Selector de módulos ── #}
+<div class="row g-4 mb-5">
+
+  {# Módulo Ventas #}
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden h-100"
+         style="background: linear-gradient(135deg,#0d6efd 0%,#0943a8 100%);">
+      <div class="card-body p-4 text-white d-flex flex-column">
+        <div style="font-size:3.5rem; line-height:1;">&#128203;</div>
+        <h3 class="fw-bold mt-3 mb-1">Módulo de Ventas</h3>
+        <p class="mb-4" style="opacity:.85;">
+          Gestiona clientes, productos, marcas, grupos, proveedores y facturas.
+        </p>
+        <div class="mt-auto d-flex flex-wrap gap-2">
+          <a href="{% url 'billing:invoice_list' %}" class="btn btn-light fw-semibold px-4">
+            &#128196; Ir a Facturas
+          </a>
+          <a href="{% url 'billing:customer_list' %}" class="btn btn-outline-light px-3">
+            &#128100; Clientes
+          </a>
+          <a href="{% url 'billing:product_list' %}" class="btn btn-outline-light px-3">
+            &#128230; Productos
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# Módulo Compras #}
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden h-100"
+         style="background: linear-gradient(135deg,#6f42c1 0%,#4a2a8a 100%);">
+      <div class="card-body p-4 text-white d-flex flex-column">
+        <div style="font-size:3.5rem; line-height:1;">&#128230;</div>
+        <h3 class="fw-bold mt-3 mb-1">Módulo de Compras</h3>
+        <p class="mb-4" style="opacity:.85;">
+          Registra órdenes de compra, controla proveedores y actualiza el inventario automáticamente.
+        </p>
+        <div class="mt-auto d-flex flex-wrap gap-2">
+          <a href="{% url 'purchasing:purchase_list' %}" class="btn btn-light fw-semibold px-4">
+            &#128230; Ir a Compras
+          </a>
+          <a href="{% url 'purchasing:purchase_create' %}" class="btn btn-outline-light px-3">
+            + Nueva Compra
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# ── Resumen rápido ── #}
+<div class="row g-3">
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm rounded-3 text-center p-3">
+      <div class="fs-2 fw-bold text-primary">{{ total_products }}</div>
+      <div class="text-muted small">Productos</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm rounded-3 text-center p-3">
+      <div class="fs-2 fw-bold text-success">{{ total_customers }}</div>
+      <div class="text-muted small">Clientes</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm rounded-3 text-center p-3">
+      <div class="fs-2 fw-bold text-info">{{ total_invoices }}</div>
+      <div class="text-muted small">Facturas</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm rounded-3 text-center p-3">
+      <div class="fs-2 fw-bold {% if low_stock > 0 %}text-danger{% else %}text-success{% endif %}">
+        {{ low_stock }}
+      </div>
+      <div class="text-muted small">Stock bajo (&le;5)</div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

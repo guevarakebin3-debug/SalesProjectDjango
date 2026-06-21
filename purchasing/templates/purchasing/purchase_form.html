@@ -1,0 +1,206 @@
+{% extends 'billing/base.html' %}
+{% block title %}Nueva Compra{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center gap-3 mb-4">
+  <a href="{% url 'purchasing:purchase_list' %}" class="btn btn-outline-secondary btn-sm">&#8592; Volver</a>
+  <h2 class="mb-0">Registrar Compra</h2>
+</div>
+
+{% if form.non_field_errors %}
+<div class="alert alert-danger rounded-3">
+  {% for err in form.non_field_errors %}{{ err }}{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  {# ── Datos de la compra ── #}
+  <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+    <div class="card-header border-0 py-3 pur-card-header">
+      <span class="text-white fw-bold fs-5">&#128230; Datos de la Compra</span>
+    </div>
+    <div class="card-body p-4">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold" for="{{ form.supplier.id_for_label }}">
+            {{ form.supplier.label }} <span class="text-danger">*</span>
+          </label>
+          {{ form.supplier }}
+          {% for err in form.supplier.errors %}
+          <div class="invalid-feedback d-block">{{ err }}</div>
+          {% endfor %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold" for="{{ form.document_number.id_for_label }}">
+            {{ form.document_number.label }} <span class="text-danger">*</span>
+          </label>
+          {{ form.document_number }}
+          {% for err in form.document_number.errors %}
+          <div class="invalid-feedback d-block">{{ err }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Detalle de productos ── #}
+  <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+    <div class="card-header border-0 py-3 bg-light d-flex align-items-center justify-content-between">
+      <span class="fw-bold">&#128203; Detalle de Productos</span>
+      <button type="button" class="btn btn-sm btn-success" id="add-row">+ Agregar Fila</button>
+    </div>
+
+    {{ formset.management_form }}
+
+    <div class="table-responsive">
+      <table class="table table-bordered mb-0" id="detail-table">
+        <thead class="table-secondary">
+          <tr>
+            <th>Producto</th>
+            <th class="text-center" style="width:120px;">Cantidad</th>
+            <th class="text-center" style="width:150px;">Costo Unit.</th>
+            <th class="text-end" style="width:130px;">Subtotal</th>
+            <th class="text-center" style="width:70px;">Quitar</th>
+          </tr>
+        </thead>
+        <tbody id="formset-body">
+          {% for detail_form in formset %}
+          <tr class="detail-row">
+            <td>
+              {{ detail_form.product }}
+              {{ detail_form.id }}
+              {% for e in detail_form.product.errors %}
+              <div class="text-danger small">{{ e }}</div>
+              {% endfor %}
+            </td>
+            <td>
+              {{ detail_form.quantity }}
+              {% for e in detail_form.quantity.errors %}
+              <div class="text-danger small">{{ e }}</div>
+              {% endfor %}
+            </td>
+            <td>
+              {{ detail_form.unit_cost }}
+              {% for e in detail_form.unit_cost.errors %}
+              <div class="text-danger small">{{ e }}</div>
+              {% endfor %}
+            </td>
+            <td class="text-end fw-semibold align-middle line-sub">$0.00</td>
+            <td class="text-center align-middle">
+              {% if detail_form.instance.pk %}
+                <div class="form-check justify-content-center d-flex">
+                  {{ detail_form.DELETE }}
+                </div>
+              {% else %}
+                <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row">&#10005;</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {# Resumen de totales #}
+    <div class="card-footer bg-light border-0 py-3 px-4">
+      <div class="float-end text-end" style="min-width:220px;">
+        <div class="d-flex justify-content-between mb-1">
+          <small class="text-muted">Subtotal:</small>
+          <span id="summary-sub" class="fw-semibold">$0.00</span>
+        </div>
+        <div class="d-flex justify-content-between mb-1">
+          <small class="text-muted">IVA (15%):</small>
+          <span id="summary-tax" class="fw-semibold">$0.00</span>
+        </div>
+        <hr class="my-2">
+        <div class="d-flex justify-content-between">
+          <span class="fw-bold">TOTAL:</span>
+          <span id="summary-total" class="fw-bold text-primary fs-5">$0.00</span>
+        </div>
+      </div>
+      <div style="clear:both;"></div>
+    </div>
+  </div>
+
+  {# ── Botones ── #}
+  <div class="d-flex gap-2 justify-content-end">
+    <a href="{% url 'purchasing:purchase_list' %}" class="btn btn-secondary">Cancelar</a>
+    <button type="submit" class="btn btn-primary px-4">&#128190; Registrar Compra</button>
+  </div>
+
+</form>
+
+<style>
+  .pur-card-header { background: linear-gradient(135deg,#6f42c1 0%,#4a2a8a 100%); }
+</style>
+
+<script>
+(function () {
+  var TOTAL_FORMS = document.getElementById('id_details-TOTAL_FORMS');
+  var body = document.getElementById('formset-body');
+
+  function parseNum(v) { var n = parseFloat(v); return isNaN(n) || n < 0 ? 0 : n; }
+  function fmt(n) { return '$' + n.toFixed(2); }
+
+  function recalcRow(row) {
+    var qty  = parseNum(row.querySelector('.pd-qty')  ? row.querySelector('.pd-qty').value  : 0);
+    var cost = parseNum(row.querySelector('.pd-cost') ? row.querySelector('.pd-cost').value : 0);
+    var sub  = qty * cost;
+    var cell = row.querySelector('.line-sub');
+    if (cell) cell.textContent = fmt(sub);
+    return sub;
+  }
+
+  function recalcAll() {
+    var total = 0;
+    body.querySelectorAll('.detail-row').forEach(function (row) {
+      total += recalcRow(row);
+    });
+    var tax = total * 0.15;
+    document.getElementById('summary-sub').textContent   = fmt(total);
+    document.getElementById('summary-tax').textContent   = fmt(tax);
+    document.getElementById('summary-total').textContent = fmt(total + tax);
+  }
+
+  body.addEventListener('input', function (e) {
+    if (e.target.classList.contains('pd-qty') || e.target.classList.contains('pd-cost')) {
+      recalcAll();
+    }
+  });
+
+  document.getElementById('add-row').addEventListener('click', function () {
+    var idx  = parseInt(TOTAL_FORMS.value);
+    var tmpl = body.querySelector('.detail-row');
+    if (!tmpl) return;
+    var newRow = tmpl.cloneNode(true);
+
+    newRow.innerHTML = newRow.innerHTML.replace(/details-\d+-/g, 'details-' + idx + '-');
+
+    newRow.querySelectorAll('input:not([type=hidden])').forEach(function (el) { el.value = ''; });
+    newRow.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+    var sub = newRow.querySelector('.line-sub');
+    if (sub) sub.textContent = '$0.00';
+
+    var lastCell = newRow.cells[newRow.cells.length - 1];
+    lastCell.innerHTML = '<button type="button" class="btn btn-sm btn-outline-danger btn-remove-row">&#10005;</button>';
+
+    body.appendChild(newRow);
+    TOTAL_FORMS.value = idx + 1;
+  });
+
+  body.addEventListener('click', function (e) {
+    if (e.target.classList.contains('btn-remove-row')) {
+      if (body.querySelectorAll('.detail-row').length > 1) {
+        e.target.closest('tr').remove();
+        recalcAll();
+      }
+    }
+  });
+
+  recalcAll();
+})();
+</script>
+
+{% endblock %}
