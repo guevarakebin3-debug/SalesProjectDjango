@@ -1,5 +1,8 @@
+from decimal import Decimal
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from shared.validators import validate_cedula_ec
+from shared.money import round_money
 
 # Create your models here.
 class Brand(models.Model):
@@ -34,6 +37,7 @@ class Supplier(models.Model):
     email = models.EmailField(blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
+    photo = models.ImageField(upload_to='suppliers/', blank=True, null=True, verbose_name='Logo')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -43,6 +47,12 @@ class Supplier(models.Model):
         ordering = ['name']
     def __str__(self): return self.name
 
+    @property
+    def photo_url(self):
+        if self.photo and self.photo.name:
+            return self.photo.url
+        return '/media/suppliers/Supplier%20generico.avif'
+
 class Product(models.Model):
     """Productos. FK a Brand/Group, M2M a Supplier."""
     name = models.CharField(max_length=200, verbose_name='Product Name')
@@ -50,8 +60,13 @@ class Product(models.Model):
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name='products')
     group = models.ForeignKey(ProductGroup, on_delete=models.PROTECT, related_name='products')
     suppliers = models.ManyToManyField(Supplier, related_name='products', blank=True)
-    photo = models.ImageField(upload_to='products/', blank=True, null=True, verbose_name='Foto')
+    photo      = models.ImageField(upload_to='products/', blank=True, null=True, verbose_name='Foto')
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
+    tax_rate   = models.DecimalField(
+                     max_digits=5, decimal_places=4, default=Decimal('0.15'),
+                     verbose_name='Tasa IVA',
+                     validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('1'))],
+                 )
     stock = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -66,22 +81,36 @@ class Product(models.Model):
     def balance(self):
         return self.unit_price * self.stock
 
+    @property
+    def photo_url(self):
+        if self.photo and self.photo.name:
+            return self.photo.url
+        return '/media/products/Producto%20generico.jpg'
+
 class Customer(models.Model):
     """Clientes. OneToOne con CustomerProfile."""
-    dni = models.CharField(max_length=13, unique=True, verbose_name='DNI/RUC', validators=[validate_cedula_ec])
+    dni        = models.CharField(max_length=13, unique=True, verbose_name='DNI/RUC', validators=[validate_cedula_ec])
     first_name = models.CharField(max_length=100)
-    last_name = models.CharField(max_length=100)
-    email = models.EmailField(blank=True, null=True)
-    phone = models.CharField(max_length=20, blank=True, null=True)
-    address = models.TextField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
+    last_name  = models.CharField(max_length=100)
+    email      = models.EmailField(blank=True, null=True)
+    phone      = models.CharField(max_length=20, blank=True, null=True)
+    address    = models.TextField(blank=True, null=True)
+    photo      = models.ImageField(upload_to='customer/', blank=True, null=True, verbose_name='Foto')
+    is_active  = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
         ordering = ['last_name', 'first_name']
     def __str__(self): return f'{self.last_name}, {self.first_name}'
+
     @property
     def full_name(self): return f'{self.first_name} {self.last_name}'
+
+    @property
+    def photo_url(self):
+        if self.photo and self.photo.name:
+            return self.photo.url
+        return '/media/customer/customer%20generico.png'
 
 class CustomerProfile(models.Model):
     """Perfil extendido. OneToOne con Customer."""
@@ -145,16 +174,24 @@ class Invoice(models.Model):
 
 class InvoiceDetail(models.Model):
     """Líneas de factura."""
-    invoice    = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='details')
-    product    = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='invoice_details')
-    quantity   = models.IntegerField(default=1)
-    unit_price = models.DecimalField(max_digits=12, decimal_places=2)
-    subtotal   = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    invoice      = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='details')
+    product      = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='invoice_details')
+    quantity     = models.IntegerField(default=1)
+    unit_price   = models.DecimalField(max_digits=12, decimal_places=2)
+    discount_pct = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0,
+        verbose_name='Descuento (%)',
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
+    )
+    subtotal     = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_amount   = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name='IVA')
 
     def __str__(self): return f'{self.product.name} x {self.quantity}'
 
     def save(self, *args, **kwargs):
-        self.subtotal = self.quantity * self.unit_price
+        base = Decimal(self.quantity) * self.unit_price
+        self.subtotal   = round_money(base * (1 - self.discount_pct / Decimal('100')))
+        self.tax_amount = round_money(self.subtotal * self.product.tax_rate)
         super().save(*args, **kwargs)
 
 

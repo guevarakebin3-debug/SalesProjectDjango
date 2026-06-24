@@ -11,7 +11,7 @@ class CustomerForm(forms.ModelForm):
 
     class Meta:
         model = Customer
-        fields = ['dni', 'first_name', 'last_name', 'email', 'phone', 'address', 'is_active']
+        fields = ['dni', 'first_name', 'last_name', 'email', 'phone', 'address', 'is_active', 'photo']
         widgets = {
             'dni': forms.TextInput(attrs={
                 'class': 'form-control form-control-lg',
@@ -46,6 +46,10 @@ class CustomerForm(forms.ModelForm):
                 'class': 'form-check-input',
                 'role': 'switch',
             }),
+            'photo': forms.FileInput(attrs={
+                'class': 'd-none',
+                'accept': 'image/*',
+            }),
         }
         labels = {
             'dni':        'DNI / RUC',
@@ -55,6 +59,7 @@ class CustomerForm(forms.ModelForm):
             'phone':      'Teléfono',
             'address':    'Dirección',
             'is_active':  'Activo',
+            'photo':      'Foto del Cliente',
         }
         help_texts = {
             'dni':       'Cédula de identidad (10 dígitos) o RUC (13 dígitos).',

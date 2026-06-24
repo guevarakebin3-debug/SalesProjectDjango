@@ -1,18 +1,25 @@
+import json
+from io import BytesIO
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib.auth import login
+from django.db import transaction
 from django.db.models import F
 from .models import *
 from shared.mixins import StaffRequiredMixin, SearchExportMixin
 from shared.decorators import audit_action
-from .forms import SignUpForm, BrandForm, InvoiceForm, InvoiceDetailFormSet, CreditNoteForm
+from django.views.decorators.http import require_POST
+from .forms import SignUpForm, BrandForm, InvoiceForm, InvoiceDetailFormSet, InvoiceDetailEditFormSet, CreditNoteForm, CustomerQuickForm, SupplierQuickForm
 from .ProductForm import ProductForm
 from .CustomerForm import CustomerForm
 from decimal import Decimal
+from shared.money import round_money
+from inventory.models import StockMovement
 
 
 # === REGISTRO ===
@@ -34,13 +41,260 @@ def home(request):
 # === DASHBOARD (selector de módulos) ===
 @login_required
 def dashboard(request):
+    from purchasing.models import Purchase
+    from django.db.models import Sum, Count
+    from django.db.models.functions import TruncMonth
+    from datetime import timedelta, date
+
+    total_ventas  = Invoice.objects.filter(estado=Invoice.EMITIDA).aggregate(t=Sum('total'))['t'] or 0
+    total_compras = Purchase.objects.filter(estado=Purchase.CONFIRMADA).aggregate(t=Sum('total'))['t'] or 0
+    margen_bruto  = total_ventas - total_compras
+
+    top_products = (
+        InvoiceDetail.objects
+        .filter(invoice__estado=Invoice.EMITIDA)
+        .values('product__name')
+        .annotate(total_qty=Sum('quantity'), total_rev=Sum('subtotal'))
+        .order_by('-total_qty')[:5]
+    )
+    top_suppliers = (
+        Purchase.objects
+        .filter(estado=Purchase.CONFIRMADA)
+        .values('supplier__name')
+        .annotate(total_amount=Sum('total'), num_orders=Count('id'))
+        .order_by('-total_amount')[:5]
+    )
+
+    six_months_ago = date.today() - timedelta(days=183)
+    monthly_sales = (
+        Invoice.objects
+        .filter(estado=Invoice.EMITIDA, invoice_date__date__gte=six_months_ago)
+        .annotate(month=TruncMonth('invoice_date'))
+        .values('month')
+        .annotate(total=Sum('total'))
+        .order_by('month')
+    )
+    sales_labels = [m['month'].strftime('%b %Y') for m in monthly_sales]
+    sales_data   = [float(m['total']) for m in monthly_sales]
+
+    estado_data = [
+        Invoice.objects.filter(estado=Invoice.BORRADOR).count(),
+        Invoice.objects.filter(estado=Invoice.EMITIDA).count(),
+        Invoice.objects.filter(estado=Invoice.ANULADA).count(),
+    ]
+
     context = {
-        'total_products':  Product.objects.count(),
-        'total_customers': Customer.objects.count(),
-        'total_invoices':  Invoice.objects.count(),
-        'low_stock':       Product.objects.filter(stock__lte=5, is_active=True).count(),
+        'total_products':    Product.objects.count(),
+        'total_customers':   Customer.objects.count(),
+        'total_invoices':    Invoice.objects.count(),
+        'low_stock':         Product.objects.filter(stock__lte=5, is_active=True).count(),
+        'total_ventas':      total_ventas,
+        'total_compras':     total_compras,
+        'margen_bruto':      margen_bruto,
+        'top_products':      top_products,
+        'top_suppliers':     top_suppliers,
+        'sales_labels_json': json.dumps(sales_labels),
+        'sales_data_json':   json.dumps(sales_data),
+        'estado_data_json':  json.dumps(estado_data),
     }
     return render(request, 'billing/dashboard.html', context)
+
+
+# === PDF DE FACTURA ===
+@login_required
+def invoice_pdf(request, pk):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_LEFT
+
+    invoice = get_object_or_404(
+        Invoice.objects.select_related('customer')
+                       .prefetch_related('details__product', 'credit_notes'),
+        pk=pk,
+    )
+    buf = BytesIO()
+    W   = 170 * mm
+
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=20*mm, rightMargin=20*mm,
+                            topMargin=15*mm, bottomMargin=15*mm)
+
+    BLUE  = colors.HexColor('#0d6efd')
+    LIGHT = colors.HexColor('#f8f9fa')
+    GRID  = colors.HexColor('#dee2e6')
+    MUTED = colors.HexColor('#6c757d')
+    ESTADO_C = {
+        0: colors.HexColor('#6c757d'),
+        1: colors.HexColor('#198754'),
+        2: colors.HexColor('#dc3545'),
+    }
+
+    def P(text, **kw):
+        kw.setdefault('fontName', 'Helvetica')
+        kw.setdefault('fontSize', 9)
+        kw.setdefault('leading', 13)
+        return Paragraph(str(text), ParagraphStyle('_', **kw))
+
+    elts = []
+
+    # ─ Encabezado ─
+    elts.append(Table([
+        [P('TecnoStock S.A.', fontName='Helvetica-Bold', fontSize=16, textColor=colors.white, leading=20),
+         P(f'FACTURA #{invoice.id}', fontName='Helvetica-Bold', fontSize=20, textColor=colors.white, alignment=TA_RIGHT, leading=24)],
+        [P('Sistema de Gestión Comercial', fontSize=9, textColor=colors.HexColor('#cce0ff'), leading=12),
+         P(invoice.invoice_date.strftime('%d/%m/%Y'), fontSize=9, textColor=colors.HexColor('#cce0ff'), alignment=TA_RIGHT, leading=12)],
+    ], colWidths=[W * 0.55, W * 0.45],
+    style=TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), BLUE),
+        ('TOPPADDING', (0, 0), (-1, -1), 5 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5 * mm),
+        ('LEFTPADDING', (0, 0), (0, -1), 5 * mm),
+        ('RIGHTPADDING', (-1, 0), (-1, -1), 5 * mm),
+    ])))
+
+    ec = ESTADO_C.get(invoice.estado, MUTED)
+    elts.append(Table(
+        [[invoice.get_estado_display()]],
+        colWidths=[W],
+        style=TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), ec),
+            ('TEXTCOLOR',  (0, 0), (-1, -1), colors.white),
+            ('FONTNAME',   (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE',   (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING', (0, 0), (-1, -1), 5 * mm),
+        ])
+    ))
+    elts.append(Spacer(1, 5 * mm))
+
+    # ─ Info cliente ─
+    c = invoice.customer
+    info_rows = [
+        ['CLIENTE', 'FECHA DE EMISIÓN'],
+        [c.full_name, invoice.invoice_date.strftime('%d/%m/%Y %H:%M')],
+        [f'DNI/RUC: {c.dni}', f'N° Factura: #{invoice.id}'],
+    ]
+    if getattr(c, 'email', None): info_rows.append([f'Email: {c.email}', ''])
+    if getattr(c, 'phone', None): info_rows.append([f'Tel: {c.phone}', ''])
+
+    elts.append(Table(info_rows, colWidths=[W * 0.6, W * 0.4],
+        style=TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, 0), LIGHT),
+            ('FONTNAME',      (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE',      (0, 0), (-1, 0), 7),
+            ('TEXTCOLOR',     (0, 0), (-1, 0), MUTED),
+            ('FONTNAME',      (0, 1), (-1, 1), 'Helvetica-Bold'),
+            ('FONTSIZE',      (0, 1), (-1, 1), 10),
+            ('FONTSIZE',      (0, 2), (-1, -1), 8),
+            ('BOX',           (0, 0), (-1, -1), 0.5, GRID),
+            ('INNERGRID',     (0, 0), (-1, -1), 0.3, GRID),
+            ('TOPPADDING',    (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 4 * mm),
+            ('RIGHTPADDING',  (0, 0), (-1, -1), 4 * mm),
+        ])))
+    elts.append(Spacer(1, 5 * mm))
+
+    # ─ Tabla de ítems ─
+    elts.append(P('DETALLE DE PRODUCTOS', fontName='Helvetica-Bold', textColor=MUTED))
+    elts.append(Spacer(1, 2 * mm))
+
+    item_rows = [['Producto', 'Cant.', 'P. Unit.', 'Dto.%', 'Base', 'IVA']]
+    for d in invoice.details.all():
+        item_rows.append([
+            d.product.name,
+            str(d.quantity),
+            f'${d.unit_price}',
+            f'{d.discount_pct}%',
+            f'${d.subtotal}',
+            f'${d.tax_amount}',
+        ])
+
+    item_ts = [
+        ('BACKGROUND',    (0, 0), (-1, 0), BLUE),
+        ('TEXTCOLOR',     (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',      (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE',      (0, 0), (-1, -1), 8),
+        ('ALIGN',         (1, 0), (1, -1), 'CENTER'),
+        ('ALIGN',         (2, 0), (-1, -1), 'RIGHT'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('BOX',           (0, 0), (-1, -1), 0.5, GRID),
+        ('INNERGRID',     (0, 0), (-1, -1), 0.3, GRID),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 3 * mm),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 3 * mm),
+    ]
+    for i in range(2, len(item_rows), 2):
+        item_ts.append(('BACKGROUND', (0, i), (-1, i), LIGHT))
+
+    elts.append(Table(item_rows,
+        colWidths=[W * 0.33, W * 0.09, W * 0.14, W * 0.10, W * 0.17, W * 0.17],
+        style=TableStyle(item_ts)))
+    elts.append(Spacer(1, 3 * mm))
+
+    # ─ Totales ─
+    elts.append(Table([
+        ['', 'Subtotal:', f'${invoice.subtotal}'],
+        ['', 'IVA:',      f'${invoice.tax}'],
+        ['', 'TOTAL:',    f'${invoice.total}'],
+    ], colWidths=[W * 0.55, W * 0.27, W * 0.18],
+    style=TableStyle([
+        ('FONTNAME',      (1, 2), (-1, 2), 'Helvetica-Bold'),
+        ('FONTSIZE',      (1, 2), (-1, 2), 11),
+        ('TEXTCOLOR',     (-1, 2), (-1, 2), BLUE),
+        ('FONTSIZE',      (0, 0), (-1, 1), 9),
+        ('ALIGN',         (1, 0), (1, -1), 'RIGHT'),
+        ('ALIGN',         (2, 0), (2, -1), 'RIGHT'),
+        ('BOX',           (1, 0), (-1, -1), 0.5, GRID),
+        ('INNERGRID',     (1, 0), (-1, -1), 0.3, GRID),
+        ('BACKGROUND',    (1, 2), (-1, 2), LIGHT),
+        ('LINEABOVE',     (1, 2), (-1, 2), 1, BLUE),
+        ('TOPPADDING',    (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING',  (2, 0), (2, -1), 4 * mm),
+        ('LEFTPADDING',   (1, 0), (1, -1), 4 * mm),
+    ])))
+
+    # ─ Notas de crédito ─
+    credit_notes = list(invoice.credit_notes.all())
+    if credit_notes:
+        elts.append(Spacer(1, 5 * mm))
+        elts.append(P('NOTAS DE CRÉDITO', fontName='Helvetica-Bold',
+                       textColor=colors.HexColor('#856404')))
+        elts.append(Spacer(1, 2 * mm))
+        nc_rows = [['NC', 'Fecha', 'Tipo', 'Monto', 'Motivo']]
+        for nc in credit_notes:
+            nc_rows.append([
+                f'NC-{nc.id}',
+                nc.date.strftime('%d/%m/%Y'),
+                nc.get_tipo_display(),
+                f'${nc.amount}',
+                nc.reason[:80],
+            ])
+        elts.append(Table(nc_rows,
+            colWidths=[W * 0.08, W * 0.12, W * 0.12, W * 0.12, W * 0.56],
+            style=TableStyle([
+                ('BACKGROUND',    (0, 0), (-1, 0), colors.HexColor('#ffc107')),
+                ('FONTNAME',      (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE',      (0, 0), (-1, -1), 8),
+                ('TOPPADDING',    (0, 0), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                ('BOX',           (0, 0), (-1, -1), 0.5, GRID),
+                ('INNERGRID',     (0, 0), (-1, -1), 0.3, GRID),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 3 * mm),
+                ('RIGHTPADDING',  (0, 0), (-1, -1), 3 * mm),
+                ('ALIGN',         (3, 0), (3, -1), 'RIGHT'),
+            ])))
+
+    doc.build(elts)
+    buf.seek(0)
+    resp = HttpResponse(buf, content_type='application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="factura-{invoice.id}.pdf"'
+    return resp
 
 
 # ── BRANDS ──────────────────────────────────────────────────────────────
@@ -85,12 +339,24 @@ def brand_delete(request, pk):
 # ── INVOICES ─────────────────────────────────────────────────────────────
 
 def _recalc_invoice(invoice):
-    """Recalcula subtotal/tax/total a partir de las líneas de detalle."""
-    subtotal         = sum(d.subtotal for d in invoice.details.all())
-    invoice.subtotal = subtotal
-    invoice.tax      = subtotal * Decimal('0.15')
-    invoice.total    = invoice.subtotal + invoice.tax
+    details          = list(invoice.details.all())
+    invoice.subtotal = round_money(sum(d.subtotal   for d in details))
+    invoice.tax      = round_money(sum(d.tax_amount for d in details))
+    invoice.total    = round_money(invoice.subtotal + invoice.tax)
     invoice.save()
+
+
+def _product_data_json():
+    data = {
+        str(p['id']): {
+            'price':    str(p['unit_price']),
+            'stock':    p['stock'],
+            'tax_rate': str(p['tax_rate']),
+        }
+        for p in Product.objects.filter(is_active=True)
+                                .values('id', 'unit_price', 'stock', 'tax_rate')
+    }
+    return json.dumps(data)
 
 
 @login_required
@@ -116,6 +382,7 @@ def invoice_create(request):
     return render(request, 'billing/invoice_form.html', {
         'form': form, 'formset': formset,
         'title': 'Nueva Factura',
+        'product_data_json': _product_data_json(),
     })
 
 
@@ -129,7 +396,7 @@ def invoice_update(request, pk):
 
     if request.method == 'POST':
         form    = InvoiceForm(request.POST, instance=invoice)
-        formset = InvoiceDetailFormSet(request.POST, instance=invoice)
+        formset = InvoiceDetailEditFormSet(request.POST, instance=invoice)
         if form.is_valid() and formset.is_valid():
             form.save()
             formset.save()
@@ -138,34 +405,73 @@ def invoice_update(request, pk):
             return redirect('billing:invoice_detail', pk=invoice.pk)
     else:
         form    = InvoiceForm(instance=invoice)
-        formset = InvoiceDetailFormSet(instance=invoice)
+        formset = InvoiceDetailEditFormSet(instance=invoice)
 
     return render(request, 'billing/invoice_form.html', {
         'form': form, 'formset': formset,
         'invoice': invoice,
         'title': f'Editar Borrador #{invoice.id}',
+        'product_data_json': _product_data_json(),
     })
 
 
 @login_required
 def invoice_confirm(request, pk):
-    """Emite un borrador: cambia estado a EMITIDA y descuenta stock de cada producto."""
+    """Emite un borrador: valida stock, cambia estado a EMITIDA y descuenta stock."""
     invoice = get_object_or_404(Invoice, pk=pk)
     if not invoice.can_confirm:
         messages.error(request, 'Solo se puede emitir una factura en estado Borrador.')
         return redirect('billing:invoice_detail', pk=pk)
 
     if request.method == 'POST':
-        for detail in invoice.details.all():
-            Product.objects.filter(pk=detail.product_id).update(
-                stock=F('stock') - detail.quantity
-            )
-        invoice.estado = Invoice.EMITIDA
-        invoice.save()
+        details = list(invoice.details.select_related('product').all())
+
+        # Validar stock antes de tocar nada
+        stock_errors = [
+            f'{d.product.name}: disponible {d.product.stock}, requerido {d.quantity}'
+            for d in details if d.product.stock < d.quantity
+        ]
+        if stock_errors:
+            for msg in stock_errors:
+                messages.error(request, f'Stock insuficiente — {msg}')
+            return redirect('billing:invoice_confirm', pk=pk)
+
+        with transaction.atomic():
+            for detail in details:
+                Product.objects.filter(pk=detail.product_id).update(
+                    stock=F('stock') - detail.quantity
+                )
+            StockMovement.objects.bulk_create([
+                StockMovement(
+                    product_id=detail.product_id,
+                    quantity=-detail.quantity,
+                    movement_type=StockMovement.VENTA,
+                    user=request.user,
+                    invoice=invoice,
+                )
+                for detail in details
+            ])
+            invoice.estado = Invoice.EMITIDA
+            invoice.save()
+
         messages.success(request, f'Factura #{invoice.id} emitida. Stock actualizado.')
         return redirect('billing:invoice_detail', pk=invoice.pk)
 
-    return render(request, 'billing/invoice_confirm_emit.html', {'invoice': invoice})
+    details_with_status = [
+        {
+            'det': d,
+            'ok': d.product.stock >= d.quantity,
+            'low': d.product.stock == d.quantity,
+            'remaining': d.product.stock - d.quantity,
+        }
+        for d in invoice.details.select_related('product').all()
+    ]
+    can_emit = all(row['ok'] for row in details_with_status)
+    return render(request, 'billing/invoice_confirm_emit.html', {
+        'invoice': invoice,
+        'details_with_status': details_with_status,
+        'can_emit': can_emit,
+    })
 
 
 @login_required
@@ -177,13 +483,25 @@ def invoice_cancel(request, pk):
         return redirect('billing:invoice_detail', pk=pk)
 
     if request.method == 'POST':
-        for detail in invoice.details.all():
-            Product.objects.filter(pk=detail.product_id).update(
-                stock=F('stock') + detail.quantity
-            )
-        invoice.estado    = Invoice.ANULADA
-        invoice.is_active = False
-        invoice.save()
+        details = list(invoice.details.select_related('product').all())
+        with transaction.atomic():
+            for detail in details:
+                Product.objects.filter(pk=detail.product_id).update(
+                    stock=F('stock') + detail.quantity
+                )
+            StockMovement.objects.bulk_create([
+                StockMovement(
+                    product_id=detail.product_id,
+                    quantity=detail.quantity,
+                    movement_type=StockMovement.DEVOLUCION_VENTA,
+                    user=request.user,
+                    invoice=invoice,
+                )
+                for detail in details
+            ])
+            invoice.estado    = Invoice.ANULADA
+            invoice.is_active = False
+            invoice.save()
         messages.success(request,
             f'Factura #{invoice.id} anulada. Stock revertido automáticamente.')
         return redirect('billing:invoice_list')
@@ -200,27 +518,38 @@ def invoice_substitute(request, pk):
         return redirect('billing:invoice_detail', pk=pk)
 
     if request.method == 'POST':
-        # 1. Anular la factura original y revertir stock
-        for detail in invoice.details.all():
-            Product.objects.filter(pk=detail.product_id).update(
-                stock=F('stock') + detail.quantity
-            )
-        invoice.estado    = Invoice.ANULADA
-        invoice.is_active = False
-        invoice.save()
+        original_details = list(invoice.details.select_related('product').all())
+        with transaction.atomic():
+            for detail in original_details:
+                Product.objects.filter(pk=detail.product_id).update(
+                    stock=F('stock') + detail.quantity
+                )
+            StockMovement.objects.bulk_create([
+                StockMovement(
+                    product_id=detail.product_id,
+                    quantity=detail.quantity,
+                    movement_type=StockMovement.DEVOLUCION_VENTA,
+                    user=request.user,
+                    invoice=invoice,
+                )
+                for detail in original_details
+            ])
+            invoice.estado    = Invoice.ANULADA
+            invoice.is_active = False
+            invoice.save()
 
-        # 2. Crear nuevo borrador con los mismos datos
-        new_invoice = Invoice.objects.create(
-            customer=invoice.customer,
-            estado=Invoice.BORRADOR,
-        )
-        for detail in invoice.details.all():
-            InvoiceDetail.objects.create(
-                invoice    = new_invoice,
-                product    = detail.product,
-                quantity   = detail.quantity,
-                unit_price = detail.unit_price,
+            new_invoice = Invoice.objects.create(
+                customer=invoice.customer,
+                estado=Invoice.BORRADOR,
             )
+            for detail in original_details:
+                InvoiceDetail.objects.create(
+                    invoice      = new_invoice,
+                    product      = detail.product,
+                    quantity     = detail.quantity,
+                    unit_price   = detail.unit_price,
+                    discount_pct = detail.discount_pct,
+                )
         _recalc_invoice(new_invoice)
 
         messages.success(request,
@@ -351,13 +680,13 @@ class SupplierListView(LoginRequiredMixin, SearchExportMixin, ListView):
 
 class SupplierCreateView(LoginRequiredMixin, CreateView):
     model         = Supplier
-    fields        = ['name', 'contact_name', 'email', 'phone', 'address', 'is_active']
+    fields        = ['name', 'contact_name', 'email', 'phone', 'address', 'is_active', 'photo']
     template_name = 'billing/supplier_form.html'
     success_url   = reverse_lazy('billing:supplier_list')
 
 class SupplierUpdateView(LoginRequiredMixin, UpdateView):
     model         = Supplier
-    fields        = ['name', 'contact_name', 'email', 'phone', 'address', 'is_active']
+    fields        = ['name', 'contact_name', 'email', 'phone', 'address', 'is_active', 'photo']
     template_name = 'billing/supplier_form.html'
     success_url   = reverse_lazy('billing:supplier_list')
 
@@ -453,6 +782,28 @@ class CustomerDeleteView(LoginRequiredMixin, StaffRequiredMixin, DeleteView):
 
 
 # ── INVOICE (CBV list) ──────────────────────────────────────────────────
+@login_required
+@require_POST
+def customer_quick_create(request):
+    form = CustomerQuickForm(request.POST)
+    if form.is_valid():
+        c = form.save()
+        return JsonResponse({'id': c.id, 'text': c.full_name})
+    errors = {f: [e['message'] for e in errs] for f, errs in form.errors.get_json_data().items()}
+    return JsonResponse({'errors': errors}, status=400)
+
+
+@login_required
+@require_POST
+def supplier_quick_create(request):
+    form = SupplierQuickForm(request.POST)
+    if form.is_valid():
+        s = form.save()
+        return JsonResponse({'id': s.id, 'text': s.name})
+    errors = {f: [e['message'] for e in errs] for f, errs in form.errors.get_json_data().items()}
+    return JsonResponse({'errors': errors}, status=400)
+
+
 class InvoiceListView(LoginRequiredMixin, SearchExportMixin, ListView):
     model           = Invoice
     queryset        = Invoice.objects.select_related('customer')

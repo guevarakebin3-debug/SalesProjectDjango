@@ -1,5 +1,21 @@
 {% extends 'billing/base.html' %}
 {% block title %}{% if form.instance.pk %}Editar{% else %}Nuevo{% endif %} Cliente{% endblock %}
+
+{% block extra_css %}
+<style>
+  .cf-photo-zone   { position: relative; display: inline-block; cursor: pointer; }
+  .cf-photo-circle { width: 110px; height: 110px; border-radius: 50%; overflow: hidden; }
+  .cf-photo-img    { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cf-camera-badge {
+    position: absolute; bottom: 2px; right: 2px;
+    background: rgba(0,0,0,.55); color: #fff;
+    border-radius: 50%; width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .8rem; pointer-events: none;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 
 <div class="d-flex align-items-center gap-3 mb-4">
@@ -19,7 +35,7 @@
 </div>
 {% endif %}
 
-<form method="post" novalidate>
+<form method="post" enctype="multipart/form-data" novalidate>
   {% csrf_token %}
 
   <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
@@ -129,12 +145,20 @@
             &#128196; Vista Previa
           </h6>
 
-          {# Avatar dinámico #}
+          {# Foto + Avatar dinámico #}
           <div class="text-center mb-4">
-            <div id="cfAvatar" class="dm-avatar cf-avatar mx-auto">
-              ?
+            <div class="cf-photo-zone mx-auto mb-1" id="cfPhotoZone" title="Clic para cambiar la foto">
+              <div id="cfAvatar" class="dm-avatar cf-avatar cf-photo-circle">
+                <img id="cfPhotoPreview" alt=""
+                     src="{% if form.instance.photo %}{{ form.instance.photo_url }}{% else %}/media/customer/customer%20generico.png{% endif %}"
+                     class="cf-photo-img {% if not form.instance.photo %}d-none{% endif %}">
+                <span id="cfInitials" class="{% if form.instance.photo %}d-none{% endif %}">?</span>
+              </div>
+              <span class="cf-camera-badge">&#128247;</span>
             </div>
-            <div id="cfFullName" class="fw-bold fs-5 mt-2 text-dark">—</div>
+            {{ form.photo }}
+            <small class="text-muted d-block mb-2">Clic para cambiar la foto</small>
+            <div id="cfFullName" class="fw-bold fs-5 text-dark">—</div>
             <div id="cfDni" class="text-muted small">—</div>
           </div>
 
@@ -181,8 +205,10 @@
   var fEmail   = document.getElementById('{{ form.email.auto_id }}');
   var fPhone   = document.getElementById('{{ form.phone.auto_id }}');
   var fAddress = document.getElementById('{{ form.address.auto_id }}');
+  var fPhoto   = document.getElementById('{{ form.photo.auto_id }}');
 
-  var elAvatar   = document.getElementById('cfAvatar');
+  var elPreview  = document.getElementById('cfPhotoPreview');
+  var elInitials = document.getElementById('cfInitials');
   var elFullName = document.getElementById('cfFullName');
   var elDni      = document.getElementById('cfDni');
   var elEmail    = document.getElementById('cfEmail');
@@ -196,16 +222,38 @@
   }
 
   function update() {
-    var first   = fFirst.value.trim();
-    var last    = fLast.value.trim();
+    var first    = fFirst.value.trim();
+    var last     = fLast.value.trim();
     var fullName = [first, last].filter(Boolean).join(' ') || '—';
 
-    elAvatar.textContent   = initials(first, last);
+    if (elInitials && !elInitials.classList.contains('d-none')) {
+      elInitials.textContent = initials(first, last);
+    }
     elFullName.textContent = fullName;
     elDni.textContent      = fDni.value.trim()     || '—';
     elEmail.textContent    = fEmail.value.trim()   || '—';
     elPhone.textContent    = fPhone.value.trim()   || '—';
     elAddress.textContent  = fAddress.value.trim() || '—';
+  }
+
+  // Clic en la zona de foto abre el file input
+  document.getElementById('cfPhotoZone').addEventListener('click', function () {
+    if (fPhoto) fPhoto.click();
+  });
+
+  // Preview al seleccionar imagen
+  if (fPhoto) {
+    fPhoto.addEventListener('change', function () {
+      if (this.files && this.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          elPreview.src = e.target.result;
+          elPreview.classList.remove('d-none');
+          if (elInitials) elInitials.classList.add('d-none');
+        };
+        reader.readAsDataURL(this.files[0]);
+      }
+    });
   }
 
   [fFirst, fLast, fDni, fEmail, fPhone, fAddress].forEach(function (el) {

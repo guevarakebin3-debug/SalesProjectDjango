@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django_extensions',
     'billing',
     'purchasing',
+    'inventory',
 ]
 
 MIDDLEWARE = [

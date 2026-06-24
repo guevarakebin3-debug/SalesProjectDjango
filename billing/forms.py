@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.forms import inlineformset_factory
-from .models import Brand, Invoice, InvoiceDetail, CreditNote
+from .models import Brand, Invoice, InvoiceDetail, CreditNote, Customer, Supplier
 
 
 class SignUpForm(UserCreationForm):
@@ -37,20 +37,60 @@ class InvoiceForm(forms.ModelForm):
         }
 
 
-InvoiceDetailFormSet = inlineformset_factory(
-    Invoice,
-    InvoiceDetail,
-    fields=['product', 'quantity', 'unit_price'],
-    extra=1,
-    min_num=1,
-    validate_min=True,
-    can_delete=True,
-    widgets={
-        'product':    forms.Select(attrs={'class': 'form-select id-product'}),
-        'quantity':   forms.NumberInput(attrs={'class': 'form-control id-qty', 'min': 1}),
-        'unit_price': forms.NumberInput(attrs={'class': 'form-control id-price', 'step': '0.01', 'min': '0.01'}),
-    }
+_DETAIL_WIDGETS = {
+    'product':      forms.Select(attrs={'class': 'form-select id-product'}),
+    'quantity':     forms.NumberInput(attrs={'class': 'form-control id-qty', 'min': 1}),
+    'unit_price':   forms.NumberInput(attrs={
+                        'class': 'form-control id-price price-readonly',
+                        'step': '0.01', 'min': '0.01',
+                        'readonly': 'readonly',
+                        'title': 'Precio unitario (se completa automáticamente al elegir el producto)',
+                        'placeholder': '0.00',
+                    }),
+    'discount_pct': forms.NumberInput(attrs={
+                        'class': 'form-control id-discount',
+                        'step': '0.01', 'min': '0', 'max': '100',
+                        'placeholder': '0',
+                    }),
+}
+
+_DETAIL_COMMON = dict(
+    fields=['product', 'quantity', 'unit_price', 'discount_pct'],
+    min_num=1, validate_min=True, can_delete=True,
+    widgets=_DETAIL_WIDGETS,
 )
+
+# extra=1 para nueva factura (da una fila vacía inicial al usuario)
+InvoiceDetailFormSet = inlineformset_factory(
+    Invoice, InvoiceDetail, extra=1, **_DETAIL_COMMON
+)
+
+# extra=0 para editar borrador existente (solo muestra las líneas ya guardadas)
+InvoiceDetailEditFormSet = inlineformset_factory(
+    Invoice, InvoiceDetail, extra=0, **_DETAIL_COMMON
+)
+
+
+class CustomerQuickForm(forms.ModelForm):
+    class Meta:
+        model  = Customer
+        fields = ['dni', 'first_name', 'last_name']
+        labels = {'dni': 'DNI / RUC', 'first_name': 'Nombres', 'last_name': 'Apellidos'}
+        widgets = {
+            'dni':        forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. 0912345678', 'maxlength': '13'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name':  forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+
+class SupplierQuickForm(forms.ModelForm):
+    class Meta:
+        model  = Supplier
+        fields = ['name']
+        labels = {'name': 'Nombre de la empresa'}
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. Distribuidora XYZ S.A.'}),
+        }
 
 
 class CreditNoteForm(forms.ModelForm):

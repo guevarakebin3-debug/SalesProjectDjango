@@ -14,7 +14,7 @@ class ProductForm(forms.ModelForm):
         model = Product
         fields = [
             'name', 'brand', 'group',
-            'unit_price', 'stock',
+            'unit_price', 'tax_rate', 'stock',
             'suppliers', 'is_active', 'description',
             'photo',
         ]
@@ -35,6 +35,13 @@ class ProductForm(forms.ModelForm):
                 'step': '0.01',
                 'min': '0.01',
                 'placeholder': '0.00',
+            }),
+            'tax_rate': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.0001',
+                'min': '0',
+                'max': '1',
+                'placeholder': '0.1500',
             }),
             'stock': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -64,6 +71,7 @@ class ProductForm(forms.ModelForm):
             'brand':       'Marca',
             'group':       'Grupo / Categoría',
             'unit_price':  'Precio Unitario',
+            'tax_rate':    'Tasa IVA',
             'stock':       'Stock',
             'suppliers':   'Proveedores',
             'is_active':   'Activo',
@@ -72,6 +80,7 @@ class ProductForm(forms.ModelForm):
         }
         help_texts = {
             'unit_price': 'Solo se permiten valores mayores que $0.00.',
+            'tax_rate':   'Valor entre 0 y 1. Ej: 0.15 = 15%. El sistema calcula IVA por línea.',
             'stock':      'Unidades disponibles en inventario.',
             'suppliers':  'Mantén Ctrl (Cmd en Mac) para seleccionar varios.',
             'is_active':  'Desactiva para ocultar el producto de las consultas.',

@@ -37,6 +37,7 @@
   {% if invoice.can_substitute %}
     <a href="{% url 'billing:invoice_substitute' invoice.pk %}" class="btn btn-secondary btn-sm">&#128260; Sustituir</a>
   {% endif %}
+  <a href="{% url 'billing:invoice_pdf' invoice.pk %}" class="btn btn-outline-primary btn-sm" title="Descargar PDF">&#128196; PDF</a>
 </div>
 
 <!-- ── Cuerpo principal ───────────────────────────────────────────── -->
@@ -66,7 +67,7 @@
             <span class="fw-semibold">${{ invoice.subtotal }}</span>
           </div>
           <div class="d-flex justify-content-between mb-1">
-            <small class="text-muted">IVA (15%)</small>
+            <small class="text-muted">IVA</small>
             <span class="fw-semibold">${{ invoice.tax }}</span>
           </div>
           <hr class="my-2">
@@ -120,7 +121,9 @@
                 <th>Producto</th>
                 <th class="text-center">Cantidad</th>
                 <th class="text-end">Precio Unit.</th>
-                <th class="text-end">Subtotal</th>
+                <th class="text-center">Dto. (%)</th>
+                <th class="text-end">Base</th>
+                <th class="text-end">IVA</th>
               </tr>
             </thead>
             <tbody>
@@ -129,23 +132,31 @@
                 <td>{{ det.product.name }}</td>
                 <td class="text-center">{{ det.quantity }}</td>
                 <td class="text-end">${{ det.unit_price }}</td>
+                <td class="text-center">
+                  {% if det.discount_pct %}
+                    <span class="badge bg-warning text-dark">{{ det.discount_pct }}%</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
                 <td class="text-end fw-semibold">${{ det.subtotal }}</td>
+                <td class="text-end text-muted">${{ det.tax_amount }}</td>
               </tr>
               {% empty %}
-              <tr><td colspan="4" class="text-center text-muted">Sin líneas de detalle.</td></tr>
+              <tr><td colspan="6" class="text-center text-muted">Sin líneas de detalle.</td></tr>
               {% endfor %}
             </tbody>
             <tfoot class="table-light">
               <tr>
-                <td colspan="3" class="text-end fw-semibold">Subtotal:</td>
+                <td colspan="5" class="text-end fw-semibold">Subtotal:</td>
                 <td class="text-end">${{ invoice.subtotal }}</td>
               </tr>
               <tr>
-                <td colspan="3" class="text-end fw-semibold">IVA (15%):</td>
+                <td colspan="5" class="text-end fw-semibold">IVA:</td>
                 <td class="text-end">${{ invoice.tax }}</td>
               </tr>
               <tr class="table-primary">
-                <td colspan="3" class="text-end fw-bold fs-6">TOTAL:</td>
+                <td colspan="5" class="text-end fw-bold fs-6">TOTAL:</td>
                 <td class="text-end fw-bold fs-6">${{ invoice.total }}</td>
               </tr>
             </tfoot>

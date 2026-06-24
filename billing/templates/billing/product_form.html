@@ -77,9 +77,9 @@
             </div>
           </div>
 
-          {# Precio + Stock #}
+          {# Precio + Tasa IVA + Stock #}
           <div class="row g-3 mb-4">
-            <div class="col-sm-6">
+            <div class="col-sm-4">
               <label class="form-label fw-semibold" for="{{ form.unit_price.id_for_label }}">
                 {{ form.unit_price.label }} <span class="text-danger">*</span>
               </label>
@@ -94,7 +94,19 @@
               <div class="form-text">{{ form.unit_price.help_text }}</div>
               {% endif %}
             </div>
-            <div class="col-sm-6">
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold" for="{{ form.tax_rate.id_for_label }}">
+                {{ form.tax_rate.label }}
+              </label>
+              {{ form.tax_rate }}
+              {% if form.tax_rate.help_text %}
+              <div class="form-text">{{ form.tax_rate.help_text }}</div>
+              {% endif %}
+              {% for err in form.tax_rate.errors %}
+              <div class="invalid-feedback d-block">{{ err }}</div>
+              {% endfor %}
+            </div>
+            <div class="col-sm-4">
               <label class="form-label fw-semibold" for="{{ form.stock.id_for_label }}">
                 {{ form.stock.label }}
               </label>

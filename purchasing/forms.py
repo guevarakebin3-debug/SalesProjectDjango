@@ -1,6 +1,6 @@
 from django import forms
 from django.forms import inlineformset_factory
-from .models import Purchase, PurchaseDetail
+from .models import Purchase, PurchaseDetail, SupplierCreditNote
 
 
 class PurchaseForm(forms.ModelForm):
@@ -63,12 +63,34 @@ class PurchaseDetailForm(forms.ModelForm):
         }
 
 
-PurchaseDetailFormSet = inlineformset_factory(
-    Purchase,
-    PurchaseDetail,
+_PURCHASE_DETAIL_COMMON = dict(
     form=PurchaseDetailForm,
-    extra=1,
-    min_num=1,
-    validate_min=True,
-    can_delete=True,
+    min_num=1, validate_min=True, can_delete=True,
 )
+
+PurchaseDetailFormSet = inlineformset_factory(
+    Purchase, PurchaseDetail, extra=1, **_PURCHASE_DETAIL_COMMON
+)
+
+PurchaseDetailEditFormSet = inlineformset_factory(
+    Purchase, PurchaseDetail, extra=0, **_PURCHASE_DETAIL_COMMON
+)
+
+
+class SupplierCreditNoteForm(forms.ModelForm):
+    class Meta:
+        model  = SupplierCreditNote
+        fields = ['tipo', 'amount', 'reason']
+        labels = {
+            'tipo':   'Tipo de Nota',
+            'amount': 'Monto',
+            'reason': 'Motivo',
+        }
+        widgets = {
+            'tipo':   forms.Select(attrs={'class': 'form-select'}),
+            'amount': forms.NumberInput(attrs={
+                          'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
+            'reason': forms.Textarea(attrs={
+                          'class': 'form-control', 'rows': 3,
+                          'placeholder': 'Describa el motivo de la devolución o descuento…'}),
+        }

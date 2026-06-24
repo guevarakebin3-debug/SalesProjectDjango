@@ -4,9 +4,13 @@
 
 <div class="d-flex align-items-center justify-content-between mb-4">
   <h2 class="mb-0">&#128230; Módulo de Compras</h2>
-  <a href="{% url 'purchasing:purchase_create' %}" class="btn btn-primary">
-    + Nueva Compra
-  </a>
+  <div class="d-flex gap-2">
+    <a href="?{% for k, v in request.GET.items %}{% if k != 'export' and k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}export=pdf"
+       class="btn btn-sm btn-outline-secondary" title="Exportar PDF">&#128196; PDF</a>
+    <a href="?{% for k, v in request.GET.items %}{% if k != 'export' and k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}export=excel"
+       class="btn btn-sm btn-outline-success" title="Exportar Excel">&#128202; Excel</a>
+    <a href="{% url 'purchasing:purchase_create' %}" class="btn btn-primary btn-sm">+ Nueva Compra</a>
+  </div>
 </div>
 
 {# ── Filtros ── #}
@@ -17,7 +21,7 @@
              placeholder="Documento / Proveedor"
              value="{{ search_params.q|default:'' }}">
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
       <select name="supplier" class="form-select form-select-sm" aria-label="Filtrar por proveedor">
         <option value="">Todos los proveedores</option>
         {% for s in suppliers %}
@@ -26,6 +30,14 @@
           {{ s.name }}
         </option>
         {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select name="estado" class="form-select form-select-sm" aria-label="Filtrar por estado">
+        <option value="">Todos los estados</option>
+        <option value="0" {% if search_params.estado == "0" %}selected{% endif %}>Borrador</option>
+        <option value="1" {% if search_params.estado == "1" %}selected{% endif %}>Confirmada</option>
+        <option value="2" {% if search_params.estado == "2" %}selected{% endif %}>Anulada</option>
       </select>
     </div>
     <div class="col-md-2">
@@ -53,10 +65,8 @@
           <th>Proveedor</th>
           <th>N° Documento</th>
           <th>Fecha</th>
-          <th class="text-end">Subtotal</th>
-          <th class="text-end">IVA</th>
           <th class="text-end">Total</th>
-          <th>Estado</th>
+          <th class="text-center">Estado</th>
           <th>Acciones</th>
         </tr>
       </thead>
@@ -67,27 +77,37 @@
           <td>{{ item.supplier.name }}</td>
           <td><span class="badge bg-secondary fw-normal">{{ item.document_number }}</span></td>
           <td>{{ item.purchase_date|date:"d/m/Y" }}</td>
-          <td class="text-end">${{ item.subtotal }}</td>
-          <td class="text-end">${{ item.tax }}</td>
           <td class="text-end fw-semibold text-primary">${{ item.total }}</td>
-          <td>
-            {% if item.is_active %}
-              <span class="badge bg-success">Activo</span>
-            {% else %}
-              <span class="badge bg-secondary">Inactivo</span>
-            {% endif %}
+          <td class="text-center">
+            <span class="badge {{ item.estado_badge_class }}">{{ item.get_estado_display }}</span>
           </td>
           <td>
-            <a href="{% url 'purchasing:purchase_detail' item.pk %}"
-               class="btn btn-sm btn-info">&#128065; Ver</a>
-            <a href="{% url 'purchasing:purchase_delete' item.pk %}"
-               class="btn btn-sm btn-danger">&#128465; Eliminar</a>
+            <div class="d-flex gap-1 flex-wrap">
+              <a href="{% url 'purchasing:purchase_detail' item.pk %}"
+                 class="btn btn-sm btn-outline-info" title="Ver detalle">&#128065;</a>
+              {% if item.can_edit %}
+              <a href="{% url 'purchasing:purchase_update' item.pk %}"
+                 class="btn btn-sm btn-outline-warning" title="Editar borrador">&#9998;</a>
+              {% endif %}
+              {% if item.can_confirm %}
+              <a href="{% url 'purchasing:purchase_confirm' item.pk %}"
+                 class="btn btn-sm btn-success" title="Confirmar">&#9989;</a>
+              {% endif %}
+              {% if item.can_cancel %}
+              <a href="{% url 'purchasing:purchase_cancel' item.pk %}"
+                 class="btn btn-sm btn-outline-danger" title="Anular">&#128683;</a>
+              {% endif %}
+              {% if item.can_delete %}
+              <a href="{% url 'purchasing:purchase_delete' item.pk %}"
+                 class="btn btn-sm btn-danger" title="Eliminar borrador">&#128465;</a>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% empty %}
         <tr>
-          <td colspan="9" class="text-center py-5 text-muted">
-            <div style="font-size:2.5rem;">&#128230;</div>
+          <td colspan="7" class="text-center py-5 text-muted">
+            <div class="fs-1">&#128230;</div>
             No hay compras registradas aún.
             <div class="mt-2">
               <a href="{% url 'purchasing:purchase_create' %}" class="btn btn-sm btn-primary">
@@ -101,5 +121,20 @@
     </table>
   </div>
 </div>
+
+{# ── Paginación ── #}
+{% if is_paginated %}
+<nav aria-label="Páginas de compras" class="mt-3">
+  <ul class="pagination pagination-sm justify-content-center mb-0">
+    {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}">&#8249;</a></li>{% else %}<li class="page-item disabled"><span class="page-link">&#8249;</span></li>{% endif %}
+    {% for num in page_obj.paginator.page_range %}{% if page_obj.number == num %}<li class="page-item active"><span class="page-link">{{ num }}</span></li>{% elif num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}<li class="page-item"><a class="page-link" href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ num }}">{{ num }}</a></li>{% endif %}{% endfor %}
+    {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?{% for k, v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}">&#8250;</a></li>{% else %}<li class="page-item disabled"><span class="page-link">&#8250;</span></li>{% endif %}
+  </ul>
+  <p class="text-center text-muted small mt-1">
+    Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+    &mdash; {{ page_obj.paginator.count }} registro{{ page_obj.paginator.count|pluralize }}
+  </p>
+</nav>
+{% endif %}
 
 {% endblock %}

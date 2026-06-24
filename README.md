@@ -37,16 +37,18 @@ Es un sistema web para la empresa ficticia **TecnoStock S.A.** que integra dos m
 
 ## Tecnologías Utilizadas
 
-| Tecnología      | Uso                                             |
-|-----------------|-------------------------------------------------|
-| Python 3        | Lenguaje principal                              |
-| Django 6        | Framework web (MVT)                             |
-| Bootstrap 5.3   | Estilos, componentes UI y modo claro/oscuro     |
-| SQLite          | Base de datos de desarrollo                     |
-| ReportLab       | Exportación a PDF                               |
-| OpenPyXL        | Exportación a Excel                             |
-| Visual Studio Code | Entorno de desarrollo                        |
-| Git / GitHub    | Control de versiones                            |
+| Tecnología         | Uso                                             |
+|--------------------|-------------------------------------------------|
+| Python 3           | Lenguaje principal                              |
+| Django 6           | Framework web (MVT)                             |
+| Bootstrap 5.3      | Estilos, componentes UI y modo claro/oscuro     |
+| Chart.js           | Gráficos del dashboard (barras y donut)         |
+| SQLite             | Base de datos de desarrollo                     |
+| ReportLab          | Exportación a PDF de facturas y compras         |
+| OpenPyXL           | Exportación a Excel                             |
+| Pillow             | Gestión de imágenes (`ImageField`)              |
+| Visual Studio Code | Entorno de desarrollo                           |
+| Git / GitHub       | Control de versiones                            |
 
 ---
 
@@ -57,7 +59,7 @@ salesdjango/
 │
 ├── manage.py                        ← Punto de entrada Django
 ├── requirements.txt                 ← Dependencias del proyecto
-├── CAMBIOS.md                       ← Historial detallado de cambios
+├── CAMBIOS.md                       ← Historial de cambios por archivo
 ├── .gitignore
 │
 ├── config/                          ← Configuración del proyecto
@@ -68,49 +70,56 @@ salesdjango/
 │
 ├── billing/                         ← App de Ventas (módulo principal)
 │   ├── models.py                    ← Brand, ProductGroup, Supplier, Product,
-│   │                                   Customer, CustomerProfile,
-│   │                                   Invoice, InvoiceDetail, CreditNote
-│   ├── views.py                     ← FBV (Invoice, Brand) + CBV (resto)
+│   │                                   Customer, Invoice, InvoiceDetail, CreditNote
+│   ├── views.py                     ← FBV (facturas, PDF) + CBV (resto)
 │   ├── forms.py                     ← SignUpForm, BrandForm, InvoiceForm,
 │   │                                   InvoiceDetailFormSet, CreditNoteForm
 │   ├── ProductForm.py               ← Formulario avanzado de Producto
-│   ├── CustomerForm.py              ← Formulario avanzado de Cliente
+│   ├── CustomerForm.py              ← Formulario avanzado de Cliente (con foto)
 │   ├── urls.py                      ← Rutas de la app de ventas
 │   ├── admin.py                     ← Registro con inlines y filtros
 │   ├── migrations/
 │   └── templates/billing/
-│       ├── base.html                ← Layout base con navbar, modal y modo oscuro
+│       ├── base.html                ← Layout base: navbar, modal detalle, modo oscuro
 │       ├── home.html                ← Landing page pública (TecnoStock S.A.)
-│       ├── dashboard.html           ← Selector de módulos post-login
+│       ├── dashboard.html           ← KPIs, Chart.js, top productos/proveedores
 │       ├── brand_*.html
 │       ├── productgroup_*.html
-│       ├── supplier_*.html
-│       ├── product_*.html
-│       ├── customer_*.html
-│       ├── invoice_*.html           ← Lista, formulario, detalle, confirmar,
-│       │                               anular, sustituir, confirmar emisión
+│       ├── supplier_*.html          ← Lista con foto, formulario con subida de imagen
+│       ├── product_*.html           ← Lista con foto, formulario con preview
+│       ├── customer_*.html          ← Lista con foto, formulario con preview en vivo
+│       ├── invoice_*.html           ← Lista, formulario, detalle, confirmar emisión,
+│       │                               anular, sustituir, PDF
 │       ├── credit_note_form.html    ← Formulario de Nota de Crédito
 │       ├── _pagination.html         ← Partial reutilizable de paginación
 │       └── _export_buttons.html     ← Partial reutilizable de exportación
 │
-├── purchasing/                      ← App de Compras (módulo secundario)
-│   ├── models.py                    ← Purchase, PurchaseDetail
-│   ├── views.py                     ← FBV: list, create, detail, delete
-│   ├── forms.py                     ← PurchaseForm, PurchaseDetailForm,
-│   │                                   PurchaseDetailFormSet
+├── purchasing/                      ← App de Compras
+│   ├── models.py                    ← Purchase, PurchaseDetail, SupplierCreditNote
+│   ├── views.py                     ← list, create, confirm, cancel, detail, delete, pdf
+│   ├── forms.py                     ← PurchaseForm, PurchaseDetailForm, FormSet
 │   ├── urls.py                      ← Rutas del módulo de compras
 │   ├── admin.py
 │   ├── migrations/
 │   └── templates/purchasing/
-│       ├── purchase_list.html
-│       ├── purchase_form.html
-│       ├── purchase_detail.html
-│       └── purchase_confirm_delete.html
+│       ├── purchase_list.html       ← Lista con filtros y exportación
+│       ├── purchase_form.html       ← Formset con recálculo JS
+│       ├── purchase_detail.html     ← Detalle: confirmar / anular / PDF
+│       ├── purchase_confirm.html    ← Confirmación de emisión
+│       ├── purchase_cancel.html     ← Confirmación de anulación
+│       ├── purchase_confirm_delete.html
+│       └── supplier_credit_note_form.html
+│
+├── inventory/                       ← App de Inventario (solo modelos y admin)
+│   ├── models.py                    ← StockMovement (auditoría de movimientos)
+│   ├── admin.py
+│   └── migrations/
 │
 ├── shared/                          ← Código reutilizable (no es una app Django)
 │   ├── __init__.py
 │   ├── mixins.py                    ← SearchListMixin, ExportMixin,
 │   │                                   SearchExportMixin, StaffRequiredMixin
+│   ├── money.py                     ← round_money() con ROUND_HALF_UP
 │   ├── decorators.py                ← @audit_action
 │   └── validators.py                ← validate_cedula_ec
 │
@@ -126,26 +135,32 @@ salesdjango/
 
 ### App `billing` (Ventas)
 
-| Modelo            | Relaciones                                                  |
-|-------------------|-------------------------------------------------------------|
-| `Brand`           | —                                                           |
-| `ProductGroup`    | —                                                           |
-| `Supplier`        | —                                                           |
-| `Product`         | FK → Brand, FK → ProductGroup, M2M → Supplier              |
-| `Customer`        | —                                                           |
-| `CustomerProfile` | OneToOne → Customer                                         |
-| `Invoice`         | FK → Customer. Estados: Borrador(0) / Emitida(1) / Anulada(2) |
-| `InvoiceDetail`   | FK → Invoice, FK → Product                                  |
-| `CreditNote`      | FK → Invoice (tipos: Devolución Total / Parcial)           |
+| Modelo          | Relaciones y notas                                                          |
+|-----------------|-----------------------------------------------------------------------------|
+| `Brand`         | —                                                                           |
+| `ProductGroup`  | —                                                                           |
+| `Supplier`      | Campo `photo` (ImageField)                                                  |
+| `Product`       | FK → Brand, FK → ProductGroup, M2M → Supplier. Campos: `photo`, `tax_rate` |
+| `Customer`      | Campo `photo` (ImageField)                                                  |
+| `Invoice`       | FK → Customer. `estado`: Borrador(0) / Emitida(1) / Anulada(2)             |
+| `InvoiceDetail` | FK → Invoice, FK → Product. Campo `discount_pct`                            |
+| `CreditNote`    | FK → Invoice. Tipos: Devolución Total / Parcial                             |
 
 ### App `purchasing` (Compras)
 
-| Modelo           | Relaciones                        |
-|------------------|-----------------------------------|
-| `Purchase`       | FK → Supplier (de billing)        |
-| `PurchaseDetail` | FK → Purchase, FK → Product (de billing) |
+| Modelo               | Relaciones y notas                                                 |
+|----------------------|--------------------------------------------------------------------|
+| `Purchase`           | FK → Supplier. `estado`: Borrador / Confirmada / Anulada           |
+| `PurchaseDetail`     | FK → Purchase (CASCADE), FK → Product (PROTECT)                   |
+| `SupplierCreditNote` | FK → Purchase. Nota de crédito emitida por el proveedor            |
 
-> Los modelos `Supplier` y `Product` son compartidos entre ambas apps; `purchasing` los importa de `billing.models`.
+### App `inventory` (Inventario)
+
+| Modelo          | Relaciones y notas                                                              |
+|-----------------|---------------------------------------------------------------------------------|
+| `StockMovement` | FK → Product, FK optional → Invoice, FK optional → Purchase, FK optional → User |
+
+> `Supplier` y `Product` son compartidos; `purchasing` e `inventory` los importan de `billing.models`.
 
 ---
 
@@ -153,14 +168,14 @@ salesdjango/
 
 ### Módulo de Ventas
 
-| Sección      | Operaciones                                                         |
-|--------------|---------------------------------------------------------------------|
-| Marcas       | Listar, Crear, Editar, Eliminar, Ver detalle, Exportar PDF/Excel    |
-| Grupos       | Listar, Crear, Editar, Eliminar, Ver detalle, Exportar PDF/Excel    |
-| Proveedores  | Listar, Crear, Editar, Eliminar, Ver detalle, Exportar PDF/Excel    |
-| Productos    | Listar, Crear, Editar, Eliminar, Ver detalle, Foto, Exportar PDF/Excel |
-| Clientes     | Listar, Crear, Editar, Eliminar, Ver detalle, Exportar PDF/Excel    |
-| Facturas     | Listar, Crear borrador, Emitir, Ver detalle, Anular, Sustituir, Nota de Crédito, Exportar |
+| Sección      | Operaciones                                                                        |
+|--------------|------------------------------------------------------------------------------------|
+| Marcas       | Listar, Crear, Editar, Eliminar, Ver detalle, Exportar PDF/Excel                  |
+| Grupos       | Listar, Crear, Editar, Eliminar, Ver detalle, Exportar PDF/Excel                  |
+| Proveedores  | Listar (con logo), Crear, Editar (subir logo), Eliminar, Ver detalle, Exportar    |
+| Productos    | Listar (con foto), Crear, Editar (subir foto, balance dinámico), Eliminar, Ver detalle, Exportar |
+| Clientes     | Listar (con foto), Crear, Editar (subir foto, preview en vivo), Eliminar, Ver detalle, Exportar |
+| Facturas     | Listar, Crear borrador, Emitir, Ver detalle, Anular, Sustituir, Nota de Crédito, Descargar PDF, Exportar |
 
 #### Ciclo de vida de facturas
 
@@ -179,29 +194,42 @@ Nueva Factura ──► Borrador ──► Emitir ──► Emitida ──► An
 
 ### Módulo de Compras
 
-| Sección  | Operaciones                                                   |
-|----------|---------------------------------------------------------------|
-| Compras  | Listar, Crear, Ver detalle, Eliminar, Exportar PDF/Excel      |
+| Sección            | Operaciones                                                                         |
+|--------------------|-------------------------------------------------------------------------------------|
+| Compras            | Listar, Crear borrador, Confirmar, Anular, Ver detalle, Descargar PDF, Exportar     |
+| Nota de crédito    | Registrar nota de crédito del proveedor vinculada a la compra                       |
 
-Al registrar una compra, el stock de cada producto se incrementa automáticamente usando expresiones `F()` del ORM de Django para evitar condiciones de carrera.
+#### Ciclo de vida de compras
+
+```
+Nueva Compra ──► Borrador ──► Confirmar ──► Confirmada ──► Anular ──► Anulada
+                   │
+                 Eliminar
+```
+
+- **Borrador** — editable; stock no modificado.
+- **Confirmada** — stock incrementado automáticamente con `F()` + `atomic()`; registra `StockMovement`.
+- **Anulada** — stock revertido; registra `StockMovement`.
 
 ---
 
 ## Características Transversales
 
-| Característica            | Descripción                                                          |
-|---------------------------|----------------------------------------------------------------------|
-| Autenticación             | Login / Logout / Registro con validación                            |
-| Control de permisos       | Eliminaciones protegidas con `StaffRequiredMixin` (solo Staff)       |
-| Auditoría                 | Decorador `@audit_action` registra acciones críticas con IP y timestamp |
-| Búsqueda y filtros        | Buscador por múltiples campos + filtros por fecha, estado, rango de precios |
-| Paginación                | Paginación automática en todos los listados (10 registros por página) |
-| Exportación               | Botones PDF y Excel en todos los módulos de listado                 |
-| Modal de detalle          | Botón "Ver" abre modal con datos del registro; botón "Editar" integrado |
-| Modo oscuro / claro       | Toggle en la barra de navegación; preferencia guardada en `localStorage` |
-| Validación de cédula      | Validador `validate_cedula_ec` con algoritmo oficial del Registro Civil del Ecuador |
-| Landing page pública      | Página de inicio con información de TecnoStock S.A. sin requerir login |
-| Dashboard post-login      | Selector visual de módulos (Ventas o Compras) con estadísticas rápidas |
+| Característica            | Descripción                                                                          |
+|---------------------------|--------------------------------------------------------------------------------------|
+| Autenticación             | Login / Logout / Registro con validación                                            |
+| Control de permisos       | Eliminaciones protegidas con `StaffRequiredMixin` (solo Staff)                       |
+| Auditoría de stock        | `StockMovement` registra cada entrada/salida con tipo, usuario, fecha y documento    |
+| Búsqueda y filtros        | Buscador por múltiples campos + filtros por fecha, estado, rango de precios          |
+| Paginación                | Paginación automática en todos los listados (10 registros por página)               |
+| Exportación               | Botones PDF y Excel en todos los módulos de listado                                 |
+| PDF de documentos         | Facturas y compras exportables a PDF con ReportLab (cabeceras a color, tablas)      |
+| Fotos en listados         | Miniatura circular en las listas de productos, clientes y proveedores               |
+| Modal de detalle          | Botón "Ver" abre modal con foto/avatar, datos del registro y botón Editar integrado |
+| Modo oscuro / claro       | Toggle en la barra de navegación; preferencia guardada en `localStorage`             |
+| Validación de cédula      | Validador `validate_cedula_ec` con algoritmo oficial del Registro Civil del Ecuador  |
+| Landing page pública      | Página de inicio de TecnoStock S.A. sin requerir login                              |
+| Dashboard con KPIs        | Ventas/compras/margen bruto, gráficos Chart.js, top 5 productos y proveedores       |
 
 ---
 
@@ -291,13 +319,13 @@ Abrir el navegador en `http://127.0.0.1:8000`
 
 ```
 Django==6.0.6
-asgiref==3.11.1
-django-extensions==4.1
 reportlab==4.5.1
 openpyxl==3.1.5
 pillow==12.2.0
-sqlparse==0.5.5
+django-extensions==4.1
 ```
+
+> No se necesita instalar nada adicional; todas las dependencias ya están declaradas en `requirements.txt`.
 
 ---
 

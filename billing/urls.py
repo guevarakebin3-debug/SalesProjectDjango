@@ -35,8 +35,12 @@ urlpatterns = [
     # Customer
     path('customers/', views.CustomerListView.as_view(), name='customer_list'),
     path('customers/create/', views.CustomerCreateView.as_view(), name='customer_create'),
+    path('customers/quick-create/', views.customer_quick_create, name='customer_quick_create'),
     path('customers/<int:pk>/edit/', views.CustomerUpdateView.as_view(), name='customer_update'),
     path('customers/<int:pk>/delete/', views.CustomerDeleteView.as_view(), name='customer_delete'),
+
+    # Quick-create (AJAX)
+    path('suppliers/quick-create/', views.supplier_quick_create, name='supplier_quick_create'),
 
     # Invoice
     path('invoices/', views.InvoiceListView.as_view(), name='invoice_list'),
@@ -48,4 +52,5 @@ urlpatterns = [
     path('invoices/<int:pk>/substitute/', views.invoice_substitute, name='invoice_substitute'),
     path('invoices/<int:pk>/credit-note/', views.credit_note_create, name='credit_note_create'),
     path('invoices/<int:pk>/delete/', views.invoice_delete, name='invoice_delete'),
+    path('invoices/<int:pk>/pdf/', views.invoice_pdf, name='invoice_pdf'),
 ]
