@@ -364,20 +364,6 @@ y crea un borrador editable. Agrega un campo estado en la tabla facturas
 y cuál es el orden correcto de herencia en Django CBV?
 ```
 
----
 
-## Equipo de Desarrollo
-
-| Nombre                     | Rol              |
-|----------------------------|------------------|
-| Vera Paredes Daniel        | Profesor         |
-| Delgado Zambrano Alexy     | 4to semestre     |
-| Gines Moncada Brithany     | 4to semestre     |
-| López Herrera Ashley       | 4to semestre     |
-| Martínez López Byron       | 4to semestre     |
-| Moreira Intriago Diego     | 4to semestre     |
-| Quizhpi Landi Andy         | 4to semestre     |
-
----
 
 > Si el proyecto te resulta útil, puedes darle una ⭐ al repositorio para apoyar el trabajo realizado.
